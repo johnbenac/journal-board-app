@@ -207,7 +207,7 @@ Please ensure you have rights to any images you add locally.
 
 ---
 
-## 🤝 Contributing (even if it's just you)
+## 🤝 Contributing
 
 * Keep features **schema‑driven**.
 * Prefer **pure functions** for validation and export/import (easy to test).
