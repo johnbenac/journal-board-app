@@ -1,0 +1,140 @@
+[
+  {
+    "cardId": "michelle-obama",
+    "data": {
+      "fullName": "Michelle Obama",
+      "tagline": "Advocate & attorney",
+      "affiliations": [],
+      "categories": ["Philanthropy", "Public Trust"],
+      "governance": 9,
+      "fundraising": 9,
+      "publicTrust": 10,
+      "opsExecution": 7,
+      "securityPrivacy": 5,
+      "legalCompliance": 7,
+      "intlNetwork": 8,
+      "mediaAgility": 9,
+      "signaturePowers": ["Public inspiration", "Education advocacy"],
+      "conflicts": "",
+      "availability": "Unknown",
+      "sources": []
+    },
+    "image": "",
+    "notes": []
+  },
+  {
+    "cardId": "alfred-nobel",
+    "data": {
+      "fullName": "Alfred Nobel",
+      "tagline": "Inventor & philanthropist",
+      "affiliations": [],
+      "categories": ["Philanthropy", "Academia"],
+      "governance": 6,
+      "fundraising": 8,
+      "publicTrust": 9,
+      "opsExecution": 5,
+      "securityPrivacy": 4,
+      "legalCompliance": 6,
+      "intlNetwork": 7,
+      "mediaAgility": 5,
+      "signaturePowers": ["Scientific innovation", "Global prize network"],
+      "conflicts": "",
+      "availability": "Unknown",
+      "sources": []
+    },
+    "image": "",
+    "notes": []
+  },
+  {
+    "cardId": "oppenheimer",
+    "data": {
+      "fullName": "J. Robert Oppenheimer",
+      "tagline": "Physicist & scientific leader",
+      "affiliations": [],
+      "categories": ["Academia", "Technologist"],
+      "governance": 7,
+      "fundraising": 4,
+      "publicTrust": 7,
+      "opsExecution": 8,
+      "securityPrivacy": 3,
+      "legalCompliance": 5,
+      "intlNetwork": 6,
+      "mediaAgility": 4,
+      "signaturePowers": ["Scientific leadership", "Project management"],
+      "conflicts": "",
+      "availability": "Unknown",
+      "sources": []
+    },
+    "image": "",
+    "notes": []
+  },
+  {
+    "cardId": "malala-yousafzai",
+    "data": {
+      "fullName": "Malala Yousafzai",
+      "tagline": "Education & human rights advocate",
+      "affiliations": [],
+      "categories": ["Philanthropy", "Policy", "Public Trust"],
+      "governance": 7,
+      "fundraising": 8,
+      "publicTrust": 10,
+      "opsExecution": 6,
+      "securityPrivacy": 4,
+      "legalCompliance": 6,
+      "intlNetwork": 9,
+      "mediaAgility": 9,
+      "signaturePowers": ["Global advocacy", "Education policy"],
+      "conflicts": "",
+      "availability": "Unknown",
+      "sources": []
+    },
+    "image": "",
+    "notes": []
+  },
+  {
+    "cardId": "edward-snowden",
+    "data": {
+      "fullName": "Edward Snowden",
+      "tagline": "Whistleblower & privacy advocate",
+      "affiliations": [],
+      "categories": ["Security", "Civil Liberties"],
+      "governance": 4,
+      "fundraising": 3,
+      "publicTrust": 6,
+      "opsExecution": 5,
+      "securityPrivacy": 10,
+      "legalCompliance": 2,
+      "intlNetwork": 5,
+      "mediaAgility": 7,
+      "signaturePowers": ["Digital privacy", "Security expertise"],
+      "conflicts": "",
+      "availability": "Unknown",
+      "sources": []
+    },
+    "image": "",
+    "notes": []
+  },
+  {
+    "cardId": "amal-clooney",
+    "data": {
+      "fullName": "Amal Clooney",
+      "tagline": "Human rights barrister",
+      "affiliations": [],
+      "categories": ["Legal", "Civil Liberties", "International"],
+      "governance": 8,
+      "fundraising": 6,
+      "publicTrust": 9,
+      "opsExecution": 7,
+      "securityPrivacy": 7,
+      "legalCompliance": 10,
+      "intlNetwork": 9,
+      "mediaAgility": 8,
+      "signaturePowers": ["Human rights law", "International diplomacy"],
+      "conflicts": "",
+      "availability": "Unknown",
+      "sources": []
+    },
+    "image": "",
+    "notes": []
+  }
+]

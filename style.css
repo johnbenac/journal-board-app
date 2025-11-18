@@ -1,0 +1,308 @@
+/* Basic styles for the Journal Foundation Board Builder */
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f9f9f9;
+  color: #333;
+}
+
+#app {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 1rem;
+  box-sizing: border-box;
+  gap: 1rem;
+  min-height: 100vh;
+}
+
+/* Sidebar for deck */
+.deck {
+  flex: 1 1 50%;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 2rem);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.board {
+  flex: 1 1 50%;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 2rem);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.section-title {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.card-item {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.card-item img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  background: #e6e6e6;
+  border-radius: 2px;
+}
+
+.card-item .name {
+  margin-top: 0.5rem;
+  font-weight: bold;
+  text-align: center;
+}
+
+.card-item button {
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.card-item button:hover {
+  background: #0056b3;
+}
+
+.add-card-btn {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.add-card-btn:hover {
+  background: #1e7e34;
+}
+
+/* Board styles */
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.slot-item {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: #f8f8f8;
+}
+
+.slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.assign-select {
+  width: 100%;
+  padding: 0.25rem;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.assigned-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.assigned-list li {
+  padding: 0.25rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.assigned-list li span {
+  margin-right: 0.5rem;
+}
+
+.assigned-list button {
+  padding: 0.15rem 0.3rem;
+  background: #dc3545;
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.assigned-list button:hover {
+  background: #c82333;
+}
+
+.add-slot-btn {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #17a2b8;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.add-slot-btn:hover {
+  background: #117a8b;
+}
+
+/* Modal styles */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #fff;
+  padding: 1rem;
+  border-radius: 4px;
+  width: 600px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal h2 {
+  margin-top: 0;
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+
+.modal input[type="text"],
+.modal input[type="number"],
+.modal select,
+.modal textarea {
+  padding: 0.25rem;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  font-size: 0.9rem;
+}
+
+.modal .field-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal .actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.modal .actions button {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.modal .actions .save-btn {
+  background: #28a745;
+  color: #fff;
+}
+
+.modal .actions .cancel-btn {
+  background: #6c757d;
+  color: #fff;
+}
+
+.modal .actions .delete-btn {
+  background: #dc3545;
+  color: #fff;
+}
+
+/* Radar chart container */
+.radar-container {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+/* Error overlay */
+.error-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  color: #721c24;
+  font-size: 1.2rem;
+  padding: 2rem;
+  text-align: center;
+}
+.error-overlay button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #dc3545;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.error-overlay button:hover {
+  background: #c82333;
+}

@@ -1,0 +1,156 @@
+{
+  "schemaName": "JournalBoardCardSchema",
+  "schemaVersion": "2025-11-17",
+  "schemaId": "journal.cards.v1",
+  "imageSpec": {
+    "format": "png",
+    "width": 750,
+    "height": 1050,
+    "alphaAllowed": false
+  },
+  "fields": [
+    {
+      "id": "fullName",
+      "label": "Full Name",
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "cardFront": true
+    },
+    {
+      "id": "tagline",
+      "label": "Tagline",
+      "type": "string",
+      "maxLength": 140,
+      "cardFront": true
+    },
+    {
+      "id": "affiliations",
+      "label": "Affiliations",
+      "type": "list",
+      "itemType": "string",
+      "cardFront": false
+    },
+    {
+      "id": "categories",
+      "label": "Categories",
+      "type": "multi-select",
+      "options": [
+        "Technologist",
+        "Legal",
+        "Civil Liberties",
+        "Philanthropy",
+        "Academia",
+        "Policy",
+        "Fundraising",
+        "Operations"
+      ],
+      "cardFront": true
+    },
+    {
+      "id": "governance",
+      "label": "Governance",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "max"
+    },
+    {
+      "id": "fundraising",
+      "label": "Fundraising",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "sum"
+    },
+    {
+      "id": "publicTrust",
+      "label": "Public Trust",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "max"
+    },
+    {
+      "id": "opsExecution",
+      "label": "Ops & Execution",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "mean"
+    },
+    {
+      "id": "securityPrivacy",
+      "label": "Security & Privacy",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "max"
+    },
+    {
+      "id": "legalCompliance",
+      "label": "Legal/Compliance",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "max"
+    },
+    {
+      "id": "intlNetwork",
+      "label": "International Network",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "max"
+    },
+    {
+      "id": "mediaAgility",
+      "label": "Media Agility",
+      "type": "number",
+      "min": 0,
+      "max": 10,
+      "radar": true,
+      "boardAggregate": "max"
+    },
+    {
+      "id": "signaturePowers",
+      "label": "Signature Powers",
+      "type": "list",
+      "itemType": "string",
+      "maxItems": 5
+    },
+    {
+      "id": "conflicts",
+      "label": "Conflicts of Interest",
+      "type": "text"
+    },
+    {
+      "id": "availability",
+      "label": "Availability",
+      "type": "enum",
+      "options": [
+        "Unknown",
+        "Exploratory",
+        "Warm",
+        "Interested",
+        "Committed"
+      ]
+    },
+    {
+      "id": "sources",
+      "label": "Reference Links",
+      "type": "list",
+      "itemType": "url",
+      "maxItems": 10
+    }
+  ],
+  "requiredCoreFields": ["fullName"],
+  "defaultSort": { "field": "publicTrust", "direction": "desc" }
+}
