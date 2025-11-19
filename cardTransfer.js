@@ -84,6 +84,8 @@
           if (field.required) hint.required = true;
           if (field.cardFront) hint.cardFront = true;
           if (field.maxLength != null) hint.maxLength = field.maxLength;
+          if (field.maxItems != null) hint.maxItems = field.maxItems;
+          if (field.unique) hint.unique = true;
           if (field.type === 'list' && field.itemType) hint.itemType = field.itemType;
           if ((field.type === 'enum' || field.type === 'multi-select') && Array.isArray(field.options)) {
             hint.options = field.options.slice();
