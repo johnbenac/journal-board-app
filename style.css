@@ -176,6 +176,180 @@ body {
   background: var(--success-hover);
 }
 
+.schema-editor-btn {
+  background: #6f42c1;
+  margin-left: 0.5rem;
+}
+
+.schema-editor-btn:hover {
+  background: #5b36a2;
+}
+
+.schema-editor-modal {
+  max-width: 960px;
+  width: 90%;
+}
+
+.schema-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.schema-fields-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.schema-field-row {
+  border: 1px solid var(--muted-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: var(--card-bg);
+  box-shadow: var(--surface-shadow);
+}
+
+.schema-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.schema-field-title {
+  font-weight: bold;
+}
+
+.schema-field-header-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.chip-btn {
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  background: var(--secondary);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.chip-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chip-btn.destructive {
+  background: var(--danger);
+}
+
+.schema-field-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.schema-field-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted-text);
+}
+
+.schema-field-control span {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.schema-flag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.schema-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-color);
+}
+
+.schema-meta-panel {
+  border: 1px solid var(--muted-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: var(--surface-color);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.schema-meta-panel h3 {
+  margin-top: 0;
+}
+
+.schema-meta-panel label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.schema-info-text {
+  font-size: 0.85rem;
+  color: var(--muted-text);
+  margin: 0 0 0.5rem 0;
+}
+
+.plan-summary {
+  border: 1px solid var(--muted-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: var(--surface-color);
+  margin-bottom: 1rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.plan-section {
+  margin-bottom: 0.75rem;
+}
+
+.plan-section h3 {
+  margin: 0 0 0.25rem 0;
+}
+
+.plan-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.plan-section.destructive h3 {
+  color: var(--danger);
+}
+
+.schema-defaults-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.schema-defaults-row label {
+  flex: 1;
+}
+
+.schema-defaults-row input,
+.schema-defaults-row select {
+  flex: 1;
+}
+
 /* Board styles */
 .slot-list {
   display: flex;

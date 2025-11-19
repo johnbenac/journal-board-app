@@ -30,7 +30,18 @@ function validateCardData(schema, data) {
         }
         break;
       case 'list':
-        if (!Array.isArray(value)) errors.push(`${field.label} must be an array`);
+        if (!Array.isArray(value)) {
+          errors.push(`${field.label} must be an array`);
+        } else if (field.itemType === 'url') {
+          for (const entry of value) {
+            try {
+              new URL(entry);
+            } catch (err) {
+              errors.push(`${field.label} contains an invalid URL`);
+              break;
+            }
+          }
+        }
         break;
       case 'text':
         if (typeof value !== 'string') errors.push(`${field.label} must be text`);
@@ -392,56 +403,225 @@ async function computeHash(str) {
     .join('');
 }
 
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function validateSchemaDraft(schema) {
+  const errors = [];
+  if (!schema.fields || !Array.isArray(schema.fields) || !schema.fields.length) {
+    errors.push('Schema must include at least one field.');
+    return errors;
+  }
+  const ids = new Set();
+  schema.fields.forEach((field) => {
+    if (!field.id || !/^[a-zA-Z0-9_]+$/.test(field.id)) {
+      errors.push(`Field "${field.label || field.id || 'unnamed'}" needs a simple alphanumeric id.`);
+    } else if (ids.has(field.id)) {
+      errors.push(`Duplicate field id "${field.id}".`);
+    } else {
+      ids.add(field.id);
+    }
+    if (!field.label) errors.push(`Field ${field.id || '(unknown)'} must have a label.`);
+    if (field.type === 'number') {
+      if (field.min === undefined || field.max === undefined) {
+        errors.push(`Number field "${field.id}" must include min and max.`);
+      } else if (field.min > field.max) {
+        errors.push(`Field "${field.id}" has min greater than max.`);
+      }
+    }
+    if ((field.type === 'enum' || field.type === 'multi-select')) {
+      if (!Array.isArray(field.options) || !field.options.length) {
+        errors.push(`Field "${field.id}" must define at least one option.`);
+      }
+    }
+    if (field.type === 'list' && !field.itemType) {
+      errors.push(`List field "${field.id}" must define an itemType.`);
+    }
+    if (field.radar && !['sum', 'mean', 'max'].includes(field.boardAggregate)) {
+      errors.push(`Radar field "${field.id}" must define boardAggregate (sum, mean or max).`);
+    }
+  });
+  (schema.requiredCoreFields || []).forEach((requiredId) => {
+    if (!ids.has(requiredId)) {
+      errors.push(`Required core field "${requiredId}" is missing from the schema.`);
+    }
+  });
+  return errors;
+}
+
+function defaultValueForField(field) {
+  switch (field.type) {
+    case 'number':
+      return null;
+    case 'enum':
+      return '';
+    case 'multi-select':
+    case 'list':
+      return [];
+    default:
+      return '';
+  }
+}
+
+async function hashSchema(schema) {
+  return computeHash(JSON.stringify(schema));
+}
+
+function indexById(fields) {
+  const map = new Map();
+  fields.forEach((field) => map.set(field.id, field));
+  return map;
+}
+
+function diffSchemas(oldSchema, newSchema) {
+  const plan = {
+    added: [],
+    removed: [],
+    typeChanged: [],
+    itemTypeChanged: [],
+    enumShrunk: [],
+    rangeTightened: []
+  };
+
+  const oldMap = indexById(oldSchema.fields || []);
+  const newMap = indexById(newSchema.fields || []);
+
+  newMap.forEach((field, id) => {
+    if (!oldMap.has(id)) {
+      plan.added.push(field);
+    }
+  });
+  oldMap.forEach((field, id) => {
+    if (!newMap.has(id)) {
+      plan.removed.push(field);
+    }
+  });
+
+  oldMap.forEach((oldField, id) => {
+    const newField = newMap.get(id);
+    if (!newField) return;
+    if (oldField.type !== newField.type) {
+      plan.typeChanged.push({ id, from: oldField.type, to: newField.type });
+    }
+    if (newField.type === 'list' && oldField.itemType !== newField.itemType) {
+      plan.itemTypeChanged.push({ id, from: oldField.itemType, to: newField.itemType });
+    }
+    if (
+      (newField.type === 'enum' || newField.type === 'multi-select') &&
+      Array.isArray(oldField.options) &&
+      Array.isArray(newField.options)
+    ) {
+      const removed = oldField.options.filter((opt) => !newField.options.includes(opt));
+      if (removed.length) {
+        plan.enumShrunk.push({ id, removedOptions: removed });
+      }
+    }
+    if (newField.type === 'number' && (oldField.min !== newField.min || oldField.max !== newField.max)) {
+      const tightened = (newField.min ?? Number.NEGATIVE_INFINITY) > (oldField.min ?? Number.NEGATIVE_INFINITY) ||
+        (newField.max ?? Number.POSITIVE_INFINITY) < (oldField.max ?? Number.POSITIVE_INFINITY);
+      if (tightened) {
+        plan.rangeTightened.push({ id, old: { min: oldField.min, max: oldField.max }, next: { min: newField.min, max: newField.max } });
+      }
+    }
+  });
+
+  return plan;
+}
+
+function convertOrReset(field, value) {
+  if (value === undefined || value === null || value === '') return value;
+  switch (field.type) {
+    case 'number':
+      return typeof value === 'number' && !Number.isNaN(value) ? value : null;
+    case 'string':
+    case 'text':
+    case 'url':
+      return typeof value === 'string' ? value : '';
+    case 'enum':
+      return field.options.includes(value) ? value : '';
+    case 'multi-select':
+      return Array.isArray(value) ? value.filter((v) => field.options.includes(v)) : [];
+    case 'list':
+      if (!Array.isArray(value)) return [];
+      if (field.itemType === 'url') {
+        return value.filter((entry) => {
+          try {
+            new URL(entry);
+            return true;
+          } catch (err) {
+            return false;
+          }
+        });
+      }
+      return value.filter((entry) => typeof entry === 'string');
+    default:
+      return value;
+  }
+}
+
+function clampIfNeeded(field, value) {
+  if (field.type !== 'number') return value;
+  if (value === undefined || value === null || Number.isNaN(value)) return null;
+  const min = field.min ?? 0;
+  const max = field.max ?? 10;
+  const num = typeof value === 'number' ? value : Number(value);
+  if (Number.isNaN(num)) return null;
+  return Math.min(max, Math.max(min, num));
+}
+
 // No network load: JSON assets are embedded. loadJson remains unused.
 
 /**
  * Initialize the application: load schema, compute hash, load or create a session.
  */
 async function init() {
-  // Use embedded schema
-  const schema = EMBEDDED_SCHEMA;
-  state.schema = schema;
-  const schemaString = JSON.stringify(schema);
-  state.schemaHash = await computeHash(schemaString);
+  const baselineSchema = EMBEDDED_SCHEMA;
+  const baselineHash = await computeHash(JSON.stringify(baselineSchema));
 
-  // Load the manifest from localStorage if present
+  let manifest = null;
+  let needsSave = false;
+
   const stored = localStorage.getItem('jf_session');
   if (stored) {
     try {
-      const manifest = JSON.parse(stored);
-      // Validate schema ID and hash
-      if (
-        manifest.schemaId === schema.schemaId &&
-        manifest.schemaHash === state.schemaHash
-      ) {
-        state.manifest = manifest;
-        state.compareSelection.clear();
-      } else {
-        // Schema mismatch – don't load, we'll show overlay later
-        state.manifest = manifest; // still load to allow import/export
-        state.compareSelection.clear();
-      }
+      manifest = JSON.parse(stored);
     } catch (e) {
       console.error('Failed to parse stored session', e);
     }
   }
 
-  // If no valid manifest, create a new one using embedded defaults
-  if (!state.manifest || state.manifest.schemaHash !== state.schemaHash) {
+  if (manifest && manifest.schema && manifest.schemaHash) {
+    state.schema = manifest.schema;
+    state.schemaHash = manifest.schemaHash;
+  } else {
+    state.schema = baselineSchema;
+    state.schemaHash = baselineHash;
+  }
+
+  if (!manifest || !manifest.deck) {
     const defaults = EMBEDDED_DEFAULTS;
-    const deck = defaults.map((card) => {
-      return {
-        cardId: card.cardId || generateId(),
-        image: card.image || '',
-        data: card.data,
-        notes: card.notes || []
-      };
-    });
-    state.manifest = {
+    const deck = defaults.map((card) => ({
+      cardId: card.cardId || generateId(),
+      image: card.image || '',
+      data: card.data,
+      notes: card.notes || []
+    }));
+    manifest = {
       manifestVersion: '1.0',
       appVersion: '0.1',
-      schemaId: schema.schemaId,
+      schemaId: state.schema.schemaId,
       schemaHash: state.schemaHash,
+      schema: state.schema,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       deck,
@@ -455,11 +635,32 @@ async function init() {
         assignments: []
       }
     };
-    state.compareSelection.clear();
-    saveSession();
+    needsSave = true;
+  } else {
+    if (!manifest.schema && manifest.schemaHash === baselineHash) {
+      manifest.schema = baselineSchema;
+      needsSave = true;
+    } else if (!manifest.schema) {
+      manifest.schema = state.schema;
+      needsSave = true;
+    }
+    if (!manifest.schemaHash) {
+      manifest.schemaHash = state.schemaHash;
+      needsSave = true;
+    }
+    if (!manifest.schemaId) {
+      manifest.schemaId = state.schema.schemaId;
+      needsSave = true;
+    }
+    state.schema = manifest.schema;
+    state.schemaHash = manifest.schemaHash;
   }
 
-  // Render the interface
+  state.manifest = manifest;
+  state.compareSelection.clear();
+  if (needsSave) {
+    saveSession();
+  }
   renderApp();
 }
 
@@ -467,6 +668,9 @@ async function init() {
  * Persist the current manifest to localStorage.
  */
 function saveSession() {
+  state.manifest.schema = state.schema;
+  state.manifest.schemaHash = state.schemaHash;
+  state.manifest.schemaId = state.schema.schemaId;
   state.manifest.updatedAt = new Date().toISOString();
   localStorage.setItem('jf_session', JSON.stringify(state.manifest));
 }
@@ -495,25 +699,6 @@ function generateId() {
  */
 function renderApp() {
   const app = document.getElementById('app');
-  // Check schema mismatch; if mismatched, show overlay
-  if (state.manifest.schemaHash !== state.schemaHash) {
-    app.innerHTML = '';
-    const overlay = document.createElement('div');
-    overlay.className = 'error-overlay';
-    overlay.innerHTML = `<p>Your saved data was created with a different schema.</p><p>Current schema hash: ${state.schemaHash}<br/>Session schema hash: ${state.manifest.schemaHash}</p>`;
-    const btn = document.createElement('button');
-    btn.textContent = 'Reset & Start Fresh';
-    btn.addEventListener('click', () => {
-      localStorage.removeItem('jf_session');
-      location.reload();
-    });
-    overlay.appendChild(btn);
-    document.body.appendChild(overlay);
-    return;
-  }
-  // Clear previous overlay if exists
-  const existingOverlay = document.querySelector('.error-overlay');
-  if (existingOverlay) existingOverlay.remove();
 
   // Main container layout: deck and board
   app.innerHTML = '';
@@ -548,6 +733,14 @@ function renderDeck(container) {
     showCardModal(null);
   });
   container.appendChild(addBtn);
+
+  const editSchemaBtn = document.createElement('button');
+  editSchemaBtn.className = 'add-card-btn schema-editor-btn';
+  editSchemaBtn.textContent = 'Edit Schema';
+  editSchemaBtn.addEventListener('click', () => {
+    showSchemaEditor();
+  });
+  container.appendChild(editSchemaBtn);
 
   const listDiv = document.createElement('div');
   listDiv.className = 'card-list';
@@ -639,17 +832,20 @@ function renderDeck(container) {
       reader.onload = function (evt) {
         try {
           const json = JSON.parse(evt.target.result);
-          if (
-            json.schemaId === state.schema.schemaId &&
-            json.schemaHash === state.schemaHash
-          ) {
-            state.manifest = json;
-            state.compareSelection.clear();
-            saveSession();
-            renderApp();
-          } else {
-            alert('Imported session does not match current schema.');
+          if (!json.schema || !json.schemaHash) {
+            alert('Imported session is missing schema information.');
+            return;
           }
+          if (json.schemaId !== state.schema.schemaId) {
+            alert('Imported session targets a different schema ID.');
+            return;
+          }
+          state.manifest = json;
+          state.schema = json.schema;
+          state.schemaHash = json.schemaHash;
+          state.compareSelection.clear();
+          saveSession();
+          renderApp();
         } catch (err) {
           alert('Failed to import: invalid file');
         }
@@ -1731,6 +1927,619 @@ function renderBoardRadar(svg) {
   polygon.setAttribute('stroke', '#28a745');
   polygon.setAttribute('stroke-width', '2');
   svg.appendChild(polygon);
+}
+
+function showSchemaEditor() {
+  const draft = deepClone(state.schema);
+  const coreSet = new Set(draft.requiredCoreFields || []);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'modal schema-editor-modal';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Edit Schema';
+  modal.appendChild(title);
+
+  const intro = document.createElement('p');
+  intro.className = 'schema-info-text';
+  intro.textContent = 'Add, remove, or adjust fields. Changes will not apply until you review and confirm the migration.';
+  modal.appendChild(intro);
+
+  const grid = document.createElement('div');
+  grid.className = 'schema-editor-grid';
+  modal.appendChild(grid);
+
+  const fieldsContainer = document.createElement('div');
+  fieldsContainer.className = 'schema-fields-list';
+  grid.appendChild(fieldsContainer);
+
+  const metaPanel = document.createElement('div');
+  metaPanel.className = 'schema-meta-panel';
+  grid.appendChild(metaPanel);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+  const reviewBtn = document.createElement('button');
+  reviewBtn.className = 'save-btn';
+  reviewBtn.textContent = 'Review Changes';
+  reviewBtn.addEventListener('click', () => {
+    const errors = validateSchemaDraft(draft);
+    if (errors.length) {
+      alert(errors.join('\n'));
+      return;
+    }
+    const plan = diffSchemas(state.schema, draft);
+    const current = JSON.stringify(state.schema);
+    const updated = JSON.stringify(draft);
+    if (current === updated) {
+      alert('No changes detected.');
+      return;
+    }
+    showMigrationWizard(draft, plan, () => {
+      if (document.body.contains(backdrop)) {
+        document.body.removeChild(backdrop);
+      }
+    });
+  });
+  actions.appendChild(cancelBtn);
+  actions.appendChild(reviewBtn);
+  modal.appendChild(actions);
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function generateFieldId(baseLabel) {
+    const normalized = baseLabel
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '') || 'field';
+    const existing = new Set(draft.fields.map((f) => f.id));
+    let candidate = normalized;
+    let counter = 1;
+    while (existing.has(candidate)) {
+      candidate = `${normalized}_${counter++}`;
+    }
+    return candidate;
+  }
+
+  function createCheckbox(label, checked, onChange, disabled) {
+    const wrapper = document.createElement('label');
+    wrapper.className = 'schema-flag';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = checked;
+    input.disabled = disabled;
+    input.addEventListener('change', () => onChange(input.checked));
+    wrapper.appendChild(input);
+    wrapper.appendChild(document.createTextNode(label));
+    return wrapper;
+  }
+
+  function renderMetaPanel() {
+    metaPanel.innerHTML = '';
+    const metaTitle = document.createElement('h3');
+    metaTitle.textContent = 'Defaults & Ordering';
+    metaPanel.appendChild(metaTitle);
+    const sort = draft.defaultSort || { field: draft.fields[0]?.id || '', direction: 'desc' };
+    draft.defaultSort = sort;
+    if (sort.field && !draft.fields.find((f) => f.id === sort.field)) {
+      sort.field = draft.fields[0]?.id || '';
+    }
+    const sortGroup = document.createElement('div');
+    sortGroup.className = 'schema-meta-group';
+    const sortFieldLabel = document.createElement('label');
+    sortFieldLabel.textContent = 'Default sort field';
+    const sortFieldSelect = document.createElement('select');
+    draft.fields.forEach((field) => {
+      const opt = document.createElement('option');
+      opt.value = field.id;
+      opt.textContent = field.label || field.id;
+      sortFieldSelect.appendChild(opt);
+    });
+    sortFieldSelect.value = sort.field;
+    sortFieldSelect.addEventListener('change', () => {
+      sort.field = sortFieldSelect.value;
+    });
+    sortFieldLabel.appendChild(sortFieldSelect);
+    sortGroup.appendChild(sortFieldLabel);
+
+    const dirLabel = document.createElement('label');
+    dirLabel.textContent = 'Default sort direction';
+    const dirSelect = document.createElement('select');
+    ['asc', 'desc'].forEach((dir) => {
+      const opt = document.createElement('option');
+      opt.value = dir;
+      opt.textContent = dir === 'asc' ? 'Ascending' : 'Descending';
+      dirSelect.appendChild(opt);
+    });
+    dirSelect.value = sort.direction || 'asc';
+    dirSelect.addEventListener('change', () => {
+      sort.direction = dirSelect.value;
+    });
+    dirLabel.appendChild(dirSelect);
+    sortGroup.appendChild(dirLabel);
+    metaPanel.appendChild(sortGroup);
+
+    const tip = document.createElement('p');
+    tip.className = 'schema-info-text';
+    tip.textContent = 'When you commit changes you will be guided through migrating existing cards.';
+    metaPanel.appendChild(tip);
+  }
+
+  function renderFields() {
+    fieldsContainer.innerHTML = '';
+    draft.fields.forEach((field, index) => {
+      const row = document.createElement('div');
+      row.className = 'schema-field-row';
+      const header = document.createElement('div');
+      header.className = 'schema-field-header';
+      const title = document.createElement('div');
+      title.className = 'schema-field-title';
+      title.textContent = `${field.label || '(Untitled)'} (${field.id})`;
+      header.appendChild(title);
+      const headerActions = document.createElement('div');
+      headerActions.className = 'schema-field-header-actions';
+      const upBtn = document.createElement('button');
+      upBtn.type = 'button';
+      upBtn.className = 'chip-btn';
+      upBtn.textContent = '↑';
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener('click', () => {
+        if (index === 0) return;
+        const temp = draft.fields[index - 1];
+        draft.fields[index - 1] = draft.fields[index];
+        draft.fields[index] = temp;
+        renderFields();
+      });
+      const downBtn = document.createElement('button');
+      downBtn.type = 'button';
+      downBtn.className = 'chip-btn';
+      downBtn.textContent = '↓';
+      downBtn.disabled = index === draft.fields.length - 1;
+      downBtn.addEventListener('click', () => {
+        if (index === draft.fields.length - 1) return;
+        const temp = draft.fields[index + 1];
+        draft.fields[index + 1] = draft.fields[index];
+        draft.fields[index] = temp;
+        renderFields();
+      });
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'chip-btn destructive';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.disabled = coreSet.has(field.id);
+      deleteBtn.addEventListener('click', () => {
+        if (coreSet.has(field.id)) return;
+        if (!confirm(`Delete field "${field.label || field.id}"? This will remove it from all cards.`)) {
+          return;
+        }
+        draft.fields.splice(index, 1);
+        renderFields();
+      });
+      headerActions.appendChild(upBtn);
+      headerActions.appendChild(downBtn);
+      headerActions.appendChild(deleteBtn);
+      header.appendChild(headerActions);
+      row.appendChild(header);
+
+      const controls = document.createElement('div');
+      controls.className = 'schema-field-controls';
+
+      const appendControl = (labelText, controlEl) => {
+        const wrapper = document.createElement('label');
+        wrapper.className = 'schema-field-control';
+        const span = document.createElement('span');
+        span.textContent = labelText;
+        wrapper.appendChild(span);
+        wrapper.appendChild(controlEl);
+        controls.appendChild(wrapper);
+      };
+
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.value = field.label || '';
+      labelInput.addEventListener('input', () => {
+        field.label = labelInput.value;
+        title.textContent = `${field.label || '(Untitled)'} (${field.id})`;
+      });
+      appendControl('Label', labelInput);
+
+      const idInput = document.createElement('input');
+      idInput.type = 'text';
+      idInput.value = field.id;
+      idInput.disabled = true;
+      appendControl('Field ID', idInput);
+
+      const typeSelect = document.createElement('select');
+      ['string', 'text', 'number', 'enum', 'multi-select', 'list', 'url'].forEach((type) => {
+        const opt = document.createElement('option');
+        opt.value = type;
+        opt.textContent = type;
+        typeSelect.appendChild(opt);
+      });
+      typeSelect.value = field.type;
+      typeSelect.addEventListener('change', () => {
+        field.type = typeSelect.value;
+        if (field.type === 'number') {
+          if (field.min === undefined) field.min = 0;
+          if (field.max === undefined) field.max = 10;
+        }
+        if ((field.type === 'enum' || field.type === 'multi-select') && !Array.isArray(field.options)) {
+          field.options = [];
+        }
+        if (field.type === 'list' && !field.itemType) {
+          field.itemType = 'string';
+        }
+        renderFields();
+      });
+      appendControl('Type', typeSelect);
+
+      if (field.type === 'number') {
+        const minInput = document.createElement('input');
+        minInput.type = 'number';
+        minInput.value = field.min ?? 0;
+        minInput.addEventListener('input', () => {
+          field.min = minInput.value === '' ? undefined : Number(minInput.value);
+        });
+        appendControl('Min', minInput);
+
+        const maxInput = document.createElement('input');
+        maxInput.type = 'number';
+        maxInput.value = field.max ?? 10;
+        maxInput.addEventListener('input', () => {
+          field.max = maxInput.value === '' ? undefined : Number(maxInput.value);
+        });
+        appendControl('Max', maxInput);
+      }
+
+      if (field.type === 'string') {
+        const maxLenInput = document.createElement('input');
+        maxLenInput.type = 'number';
+        maxLenInput.value = field.maxLength ?? '';
+        maxLenInput.addEventListener('input', () => {
+          field.maxLength = maxLenInput.value === '' ? undefined : Number(maxLenInput.value);
+        });
+        appendControl('Max Length', maxLenInput);
+      }
+
+      if (field.type === 'enum' || field.type === 'multi-select') {
+        const optionsArea = document.createElement('textarea');
+        optionsArea.rows = 4;
+        optionsArea.value = (field.options || []).join('\n');
+        optionsArea.addEventListener('input', () => {
+          field.options = optionsArea
+            .value
+            .split('\n')
+            .map((opt) => opt.trim())
+            .filter(Boolean);
+        });
+        appendControl('Options (one per line)', optionsArea);
+      }
+
+      if (field.type === 'list') {
+        const itemTypeSelect = document.createElement('select');
+        ['string', 'url'].forEach((type) => {
+          const opt = document.createElement('option');
+          opt.value = type;
+          opt.textContent = type === 'url' ? 'URL' : 'Text';
+          itemTypeSelect.appendChild(opt);
+        });
+        itemTypeSelect.value = field.itemType || 'string';
+        itemTypeSelect.addEventListener('change', () => {
+          field.itemType = itemTypeSelect.value;
+        });
+        appendControl('List item type', itemTypeSelect);
+      }
+
+      const flags = document.createElement('div');
+      flags.className = 'schema-flag-row';
+      flags.appendChild(
+        createCheckbox('Required', Boolean(field.required), (checked) => {
+          field.required = checked;
+        }, coreSet.has(field.id))
+      );
+      flags.appendChild(
+        createCheckbox('Unique', Boolean(field.unique), (checked) => {
+          field.unique = checked;
+        }, false)
+      );
+      flags.appendChild(
+        createCheckbox('Show on card front', Boolean(field.cardFront), (checked) => {
+          field.cardFront = checked;
+        }, false)
+      );
+      flags.appendChild(
+        createCheckbox('Radar axis', Boolean(field.radar), (checked) => {
+          field.radar = checked;
+          if (field.radar && !field.boardAggregate) {
+            field.boardAggregate = 'max';
+          }
+          renderFields();
+        }, false)
+      );
+      row.appendChild(controls);
+      row.appendChild(flags);
+
+      if (field.radar) {
+        const aggSelect = document.createElement('select');
+        ['sum', 'mean', 'max'].forEach((agg) => {
+          const opt = document.createElement('option');
+          opt.value = agg;
+          opt.textContent = agg;
+          aggSelect.appendChild(opt);
+        });
+        aggSelect.value = field.boardAggregate || 'max';
+        aggSelect.addEventListener('change', () => {
+          field.boardAggregate = aggSelect.value;
+        });
+        appendControl('Board aggregate', aggSelect);
+      }
+
+      fieldsContainer.appendChild(row);
+    });
+
+    const addFieldBtn = document.createElement('button');
+    addFieldBtn.className = 'add-card-btn';
+    addFieldBtn.type = 'button';
+    addFieldBtn.textContent = 'Add Field';
+    addFieldBtn.addEventListener('click', () => {
+      const newFieldId = generateFieldId('new_field');
+      draft.fields.push({
+        id: newFieldId,
+        label: 'New Field',
+        type: 'string',
+        required: false,
+        cardFront: false
+      });
+      renderFields();
+    });
+    fieldsContainer.appendChild(addFieldBtn);
+
+    renderMetaPanel();
+  }
+
+  renderFields();
+}
+
+function renderPlanSummaryHtml(plan) {
+  const sections = [];
+  if (plan.added && plan.added.length) {
+    sections.push(
+      `<div class="plan-section"><h3>Added fields</h3><ul>${plan.added
+        .map((f) => `<li>${escapeHtml(f.label || f.id)} (${escapeHtml(f.id)})</li>`)
+        .join('')}</ul></div>`
+    );
+  }
+  if (plan.removed && plan.removed.length) {
+    sections.push(
+      `<div class="plan-section destructive"><h3>Removed fields</h3><ul>${plan.removed
+        .map((f) => `<li>${escapeHtml(f.label || f.id)} (${escapeHtml(f.id)})</li>`)
+        .join('')}</ul></div>`
+    );
+  }
+  if (plan.typeChanged && plan.typeChanged.length) {
+    sections.push(
+      `<div class="plan-section destructive"><h3>Type changes</h3><ul>${plan.typeChanged
+        .map((c) => `<li>${escapeHtml(c.id)}: ${escapeHtml(c.from)} → ${escapeHtml(c.to)}</li>`)
+        .join('')}</ul></div>`
+    );
+  }
+  if (plan.itemTypeChanged && plan.itemTypeChanged.length) {
+    sections.push(
+      `<div class="plan-section destructive"><h3>List item type changes</h3><ul>${plan.itemTypeChanged
+        .map((c) => `<li>${escapeHtml(c.id)}: ${escapeHtml(c.from || 'unspecified')} → ${escapeHtml(c.to || 'unspecified')}</li>`)
+        .join('')}</ul></div>`
+    );
+  }
+  if (plan.enumShrunk && plan.enumShrunk.length) {
+    sections.push(
+      `<div class="plan-section destructive"><h3>Removed options</h3><ul>${plan.enumShrunk
+        .map((c) => `<li>${escapeHtml(c.id)} lost: ${escapeHtml(c.removedOptions.join(', '))}</li>`)
+        .join('')}</ul></div>`
+    );
+  }
+  if (plan.rangeTightened && plan.rangeTightened.length) {
+    sections.push(
+      `<div class="plan-section destructive"><h3>Number ranges tightened</h3><ul>${plan.rangeTightened
+        .map((c) => `<li>${escapeHtml(c.id)}: ${escapeHtml(String(c.old.min))}-${escapeHtml(String(c.old.max))} → ${escapeHtml(String(c.next.min))}-${escapeHtml(String(c.next.max))}</li>`)
+        .join('')}</ul></div>`
+    );
+  }
+  if (!sections.length) {
+    sections.push('<p>No structural changes detected. Committing will update labels and metadata only.</p>');
+  }
+  return sections.join('');
+}
+
+function showMigrationWizard(nextSchema, plan, onComplete) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = '<h2>Review Schema Changes</h2>';
+
+  const summary = document.createElement('div');
+  summary.className = 'plan-summary';
+  summary.innerHTML = renderPlanSummaryHtml(plan);
+  modal.appendChild(summary);
+
+  const defaults = {};
+  if (plan.added && plan.added.length) {
+    const defBox = document.createElement('div');
+    defBox.className = 'field-group';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Defaults for new fields';
+    defBox.appendChild(heading);
+    plan.added.forEach((field) => {
+      defaults[field.id] = defaultValueForField(field);
+      const row = document.createElement('div');
+      row.className = 'schema-defaults-row';
+      const label = document.createElement('label');
+      label.textContent = `${field.label || field.id}`;
+      row.appendChild(label);
+      if (field.type === 'multi-select' || field.type === 'list') {
+        const note = document.createElement('span');
+        note.className = 'schema-info-text';
+        note.textContent = 'Defaults to empty list';
+        note.style.flex = '1';
+        row.appendChild(note);
+      } else if (field.type === 'enum') {
+        const select = document.createElement('select');
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = 'Leave blank';
+        select.appendChild(blank);
+        (field.options || []).forEach((opt) => {
+          const option = document.createElement('option');
+          option.value = opt;
+          option.textContent = opt;
+          select.appendChild(option);
+        });
+        select.addEventListener('change', () => {
+          defaults[field.id] = select.value;
+        });
+        row.appendChild(select);
+      } else {
+        const input = document.createElement('input');
+        input.type = field.type === 'number' ? 'number' : 'text';
+        input.placeholder = field.type === 'number' ? '(leave blank for null)' : '(leave blank)';
+        input.addEventListener('input', () => {
+          if (field.type === 'number') {
+            defaults[field.id] = input.value === '' ? null : Number(input.value);
+          } else {
+            defaults[field.id] = input.value;
+          }
+        });
+        row.appendChild(input);
+      }
+      defBox.appendChild(row);
+    });
+    modal.appendChild(defBox);
+  }
+
+  const info = document.createElement('p');
+  info.className = 'schema-info-text';
+  info.textContent = 'You may wish to export a backup before applying destructive changes.';
+  modal.appendChild(info);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const backupBtn = document.createElement('button');
+  backupBtn.className = 'cancel-btn';
+  backupBtn.textContent = 'Export Backup';
+  backupBtn.addEventListener('click', exportSession);
+  actions.appendChild(backupBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+  actions.appendChild(cancelBtn);
+
+  const commitBtn = document.createElement('button');
+  commitBtn.className = 'save-btn';
+  commitBtn.textContent = 'Commit & Migrate';
+  commitBtn.addEventListener('click', async () => {
+    const destructive = (plan.removed?.length || 0) +
+      (plan.typeChanged?.length || 0) +
+      (plan.itemTypeChanged?.length || 0) +
+      (plan.enumShrunk?.length || 0) +
+      (plan.rangeTightened?.length || 0);
+    if (destructive && !confirm('Destructive changes detected. Proceed?')) {
+      return;
+    }
+    try {
+      await applyMigration(state.schema, nextSchema, plan, defaults);
+      document.body.removeChild(backdrop);
+      if (onComplete) onComplete();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to apply migration.');
+    }
+  });
+  actions.appendChild(commitBtn);
+
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+}
+
+async function applyMigration(oldSchema, newSchema, plan, defaultsByField) {
+  plan = plan || {};
+  const deck = state.manifest.deck;
+  const defaults = defaultsByField || {};
+  const newMap = indexById(newSchema.fields || []);
+
+  (plan.added || []).forEach((field) => {
+    const def = defaults[field.id] !== undefined ? defaults[field.id] : defaultValueForField(field);
+    deck.forEach((card) => {
+      if (card.data[field.id] !== undefined) return;
+      if (Array.isArray(def)) {
+        card.data[field.id] = [...def];
+      } else if (typeof def === 'object' && def !== null) {
+        card.data[field.id] = deepClone(def);
+      } else {
+        card.data[field.id] = def;
+      }
+    });
+  });
+
+  (plan.removed || []).forEach((field) => {
+    deck.forEach((card) => {
+      delete card.data[field.id];
+    });
+  });
+
+  (plan.typeChanged || []).forEach((change) => {
+    const newField = newMap.get(change.id);
+    if (!newField) return;
+    deck.forEach((card) => {
+      card.data[change.id] = convertOrReset(newField, card.data[change.id]);
+    });
+  });
+
+  (plan.itemTypeChanged || []).forEach((change) => {
+    const newField = newMap.get(change.id);
+    if (!newField) return;
+    deck.forEach((card) => {
+      card.data[change.id] = convertOrReset(newField, card.data[change.id]);
+    });
+  });
+
+  (plan.enumShrunk || []).forEach((change) => {
+    const newField = newMap.get(change.id);
+    if (!newField) return;
+    deck.forEach((card) => {
+      card.data[change.id] = convertOrReset(newField, card.data[change.id]);
+    });
+  });
+
+  (plan.rangeTightened || []).forEach((change) => {
+    const newField = newMap.get(change.id);
+    if (!newField) return;
+    deck.forEach((card) => {
+      card.data[change.id] = clampIfNeeded(newField, card.data[change.id]);
+    });
+  });
+
+  state.schema = newSchema;
+  state.manifest.schema = newSchema;
+  state.schemaHash = await hashSchema(newSchema);
+  state.manifest.schemaHash = state.schemaHash;
+  saveSession();
+  renderApp();
+  alert('Schema updated and cards migrated.');
 }
 
 /**
