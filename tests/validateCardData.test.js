@@ -49,3 +49,12 @@ test('validateCardData: valid data passes', () => {
   const errors = validateCardData(schema, data);
   assert.strictEqual(errors.length, 0);
 });
+
+test('validateCardData: invalid URL in list field', () => {
+  const data = {
+    fullName: 'Link Checker',
+    sources: ['notaurl']
+  };
+  const errors = validateCardData(schema, data);
+  assert(errors.some((e) => e.includes('Reference Links contains an invalid URL')));
+});
