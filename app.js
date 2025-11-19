@@ -98,7 +98,10 @@ const EMBEDDED_SCHEMA = /** @type {any} */ (
           "Academia",
           "Policy",
           "Fundraising",
-          "Operations"
+          "Operations",
+          "Public Trust",
+          "Security",
+          "International"
         ],
         "cardFront": true
       },
@@ -1087,6 +1090,15 @@ function showCardModal(card) {
   function handleSave() {
     const errs = validateCardData(state.schema, cardData);
     if (errs.length) {
+      console.groupCollapsed('Card validation failed');
+      console.error('Card:', card ? card.cardId : '(new card)');
+      console.error('Data snapshot:', cardData);
+      console.error('Validation errors:', errs);
+      const categoryField = state.schema.fields.find((f) => f.id === 'categories');
+      if (categoryField) {
+        console.info('Category options:', categoryField.options);
+      }
+      console.groupEnd();
       alert(errs.join('\n'));
       return;
     }
