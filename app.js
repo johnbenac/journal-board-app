@@ -750,8 +750,9 @@ function renderBoard(container) {
   const radarWrap = document.createElement('div');
   radarWrap.className = 'radar-container';
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '300');
-  svg.setAttribute('height', '300');
+  svg.setAttribute('width', '360');
+  svg.setAttribute('height', '360');
+  svg.style.overflow = 'visible';
   radarWrap.appendChild(svg);
   container.appendChild(radarWrap);
   renderBoardRadar(svg);
@@ -1016,8 +1017,9 @@ function showCardModal(card) {
   const radarWrap = document.createElement('div');
   radarWrap.className = 'radar-container';
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '250');
-  svg.setAttribute('height', '250');
+  svg.setAttribute('width', '320');
+  svg.setAttribute('height', '320');
+  svg.style.overflow = 'visible';
   radarWrap.appendChild(svg);
   form.appendChild(radarWrap);
   // Render radar for editing card data
@@ -1120,6 +1122,28 @@ function showCardModal(card) {
 }
 
 /**
+ * Calculate reusable geometry values for radar SVGs, ensuring there is
+ * enough margin to display outer labels without clipping.
+ * @param {SVGSVGElement} svg
+ * @param {number} margin
+ */
+function getRadarGeometry(svg, margin = 30) {
+  const widthAttr = parseFloat(svg.getAttribute('width') || '');
+  const heightAttr = parseFloat(svg.getAttribute('height') || '');
+  const width = !isNaN(widthAttr) && widthAttr > 0 ? widthAttr : svg.clientWidth || 0;
+  const height = !isNaN(heightAttr) && heightAttr > 0 ? heightAttr : svg.clientHeight || 0;
+  const minDim = Math.min(width, height);
+  const usableRadius = Math.max(minDim / 2 - margin, minDim / 4);
+  return {
+    width,
+    height,
+    centerX: width / 2,
+    centerY: height / 2,
+    radius: usableRadius,
+  };
+}
+
+/**
  * Render a radar chart for a single card into the given SVG element.
  * @param {SVGSVGElement} svg
  * @param {object} cardData
@@ -1127,9 +1151,8 @@ function showCardModal(card) {
 function renderCardRadar(svg, cardData) {
   const radarFields = state.schema.fields.filter((f) => f.radar);
   const numAxes = radarFields.length;
-  const centerX = 125;
-  const centerY = 125;
-  const radius = 100;
+  const { centerX, centerY, radius } = getRadarGeometry(svg, 35);
+  const labelRadius = radius + 20;
   // Clear svg
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   // Draw grid (5 concentric circles)
@@ -1157,8 +1180,8 @@ function renderCardRadar(svg, cardData) {
     svg.appendChild(line);
     // label
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', (centerX + Math.cos(angle) * (radius + 15)).toString());
-    text.setAttribute('y', (centerY + Math.sin(angle) * (radius + 15)).toString());
+    text.setAttribute('x', (centerX + Math.cos(angle) * labelRadius).toString());
+    text.setAttribute('y', (centerY + Math.sin(angle) * labelRadius).toString());
     text.setAttribute('font-size', '8');
     text.setAttribute('text-anchor', angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start');
     text.setAttribute('dominant-baseline', 'middle');
@@ -1192,9 +1215,8 @@ function renderCardRadar(svg, cardData) {
 function renderBoardRadar(svg) {
   const radarFields = state.schema.fields.filter((f) => f.radar);
   const numAxes = radarFields.length;
-  const centerX = 150;
-  const centerY = 150;
-  const radius = 120;
+  const { centerX, centerY, radius } = getRadarGeometry(svg, 45);
+  const labelRadius = radius + 25;
   // Clear svg
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   // Draw grid lines
@@ -1222,8 +1244,8 @@ function renderBoardRadar(svg) {
     svg.appendChild(line);
     // label
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', (centerX + Math.cos(angle) * (radius + 20)).toString());
-    text.setAttribute('y', (centerY + Math.sin(angle) * (radius + 20)).toString());
+    text.setAttribute('x', (centerX + Math.cos(angle) * labelRadius).toString());
+    text.setAttribute('y', (centerY + Math.sin(angle) * labelRadius).toString());
     text.setAttribute('font-size', '8');
     text.setAttribute('text-anchor', angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start');
     text.setAttribute('dominant-baseline', 'middle');
