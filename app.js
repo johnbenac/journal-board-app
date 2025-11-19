@@ -801,112 +801,8 @@ function renderDeck(container) {
     listDiv.appendChild(item);
   });
   container.appendChild(listDiv);
-  // Import/export controls
-  const controls = document.createElement('div');
-  controls.style.marginTop = '1rem';
-  // Export session
-  const exportBtn = document.createElement('button');
-  exportBtn.className = 'add-card-btn';
-  exportBtn.style.background = '#ffc107';
-  exportBtn.style.color = '#333';
-  exportBtn.textContent = 'Export Session';
-  exportBtn.addEventListener('click', () => {
-    exportSession();
-  });
-  controls.appendChild(exportBtn);
-  // Import session
-  const importLabel = document.createElement('label');
-  importLabel.style.display = 'inline-block';
-  importLabel.style.marginLeft = '0.5rem';
-  importLabel.className = 'add-card-btn';
-  importLabel.style.background = '#17a2b8';
-  importLabel.textContent = 'Import Session';
-  const importInput = document.createElement('input');
-  importInput.type = 'file';
-  importInput.accept = '.json,.jfpack';
-  importInput.style.display = 'none';
-  importInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function (evt) {
-        try {
-          const json = JSON.parse(evt.target.result);
-          if (!json.schema || !json.schemaHash) {
-            alert('Imported session is missing schema metadata.');
-            return;
-          }
-          if (
-            json.schemaId === state.schema.schemaId &&
-            json.schemaHash === state.schemaHash
-          ) {
-            state.manifest = json;
-            state.schema = json.schema;
-            state.manifest.schema = state.schema;
-            state.schemaHash = json.schemaHash;
-            state.compareSelection.clear();
-            saveSession();
-            renderApp();
-          } else {
-            alert('Imported session does not match current schema.');
-          }
-        } catch (err) {
-          alert('Failed to import: invalid file');
-        }
-      };
-      reader.readAsText(file);
-    }
-  });
-  importLabel.appendChild(importInput);
-  controls.appendChild(importLabel);
-
-  if (cardTransfer) {
-    const importCardLabel = document.createElement('label');
-    importCardLabel.style.display = 'inline-block';
-    importCardLabel.style.marginLeft = '0.5rem';
-    importCardLabel.className = 'add-card-btn';
-    importCardLabel.style.background = '#6610f2';
-    importCardLabel.textContent = 'Import Card';
-    const importCardInput = document.createElement('input');
-    importCardInput.type = 'file';
-    importCardInput.accept = '.json,.jfcard';
-    importCardInput.style.display = 'none';
-    importCardInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function (evt) {
-        try {
-          const payload = JSON.parse(evt.target.result);
-          const newCard = cardTransfer.prepareImportedCard(payload, {
-            schema: state.schema,
-            schemaHash: state.schemaHash,
-            existingDeck: state.manifest.deck,
-            generateId,
-            validator: validateCardData
-          });
-          state.manifest.deck.push(newCard);
-          saveSession();
-          renderApp();
-        } catch (err) {
-          alert(err.message || 'Failed to import card');
-        } finally {
-          importCardInput.value = '';
-        }
-      };
-      reader.onerror = () => {
-        alert('Failed to read card file');
-        importCardInput.value = '';
-      };
-      reader.readAsText(file);
-    });
-    importCardLabel.appendChild(importCardInput);
-    controls.appendChild(importCardLabel);
-  }
-  container.appendChild(controls);
-
-  // Sticky compare bar inside the Deck panel
-  renderCompareToolbar(container);
+  // Sticky footer inside the Deck panel
+  renderDeckFooter(container);
 }
 
 function showSchemaEditor() {
@@ -1739,25 +1635,27 @@ function toggleCompareSelection(cardId, selected) {
   }
 }
 
-/** Sticky bar inside the Deck panel. */
-function renderCompareToolbar(deckContainer) {
-  let bar = deckContainer.querySelector('.compare-bar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.className = 'compare-bar';
-    deckContainer.appendChild(bar);
+/** Sticky footer inside the Deck panel. */
+function renderDeckFooter(deckContainer) {
+  let footer = deckContainer.querySelector('.deck-footer');
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.className = 'deck-footer';
+    deckContainer.appendChild(footer);
   }
   const selectedIds = Array.from(state.compareSelection);
   const count = selectedIds.length;
 
-  bar.innerHTML = '';
+  footer.innerHTML = '';
 
-  const left = document.createElement('div');
-  left.className = 'compare-summary';
-  left.textContent = count ? `${count} selected` : 'Select cards to compare';
+  const compareSummary = document.createElement('div');
+  compareSummary.className = 'compare-summary';
+  compareSummary.textContent = count
+    ? `${count} selected`
+    : 'Select cards to compare';
 
-  const actions = document.createElement('div');
-  actions.className = 'compare-actions';
+  const compareActions = document.createElement('div');
+  compareActions.className = 'deck-footer-actions';
 
   const clearBtn = document.createElement('button');
   clearBtn.className = 'btn-secondary';
@@ -1776,10 +1674,110 @@ function renderCompareToolbar(deckContainer) {
     showCompareModal(selectedIds);
   });
 
-  actions.appendChild(clearBtn);
-  actions.appendChild(compareBtn);
-  bar.appendChild(left);
-  bar.appendChild(actions);
+  compareActions.appendChild(clearBtn);
+  compareActions.appendChild(compareBtn);
+
+  const importExport = document.createElement('div');
+  importExport.className = 'deck-footer-imports';
+
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'add-card-btn';
+  exportBtn.style.background = '#ffc107';
+  exportBtn.style.color = '#333';
+  exportBtn.textContent = 'Export Session';
+  exportBtn.addEventListener('click', () => {
+    exportSession();
+  });
+  importExport.appendChild(exportBtn);
+
+  const importLabel = document.createElement('label');
+  importLabel.className = 'add-card-btn';
+  importLabel.style.background = '#17a2b8';
+  importLabel.textContent = 'Import Session';
+  const importInput = document.createElement('input');
+  importInput.type = 'file';
+  importInput.accept = '.json,.jfpack';
+  importInput.style.display = 'none';
+  importInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        try {
+          const json = JSON.parse(evt.target.result);
+          if (!json.schema || !json.schemaHash) {
+            alert('Imported session is missing schema metadata.');
+            return;
+          }
+          if (
+            json.schemaId === state.schema.schemaId &&
+            json.schemaHash === state.schemaHash
+          ) {
+            state.manifest = json;
+            state.schema = json.schema;
+            state.manifest.schema = state.schema;
+            state.schemaHash = json.schemaHash;
+            state.compareSelection.clear();
+            saveSession();
+            renderApp();
+          } else {
+            alert('Imported session does not match current schema.');
+          }
+        } catch (err) {
+          alert('Failed to import: invalid file');
+        }
+      };
+      reader.readAsText(file);
+    }
+  });
+  importLabel.appendChild(importInput);
+  importExport.appendChild(importLabel);
+
+  if (cardTransfer) {
+    const importCardLabel = document.createElement('label');
+    importCardLabel.className = 'add-card-btn';
+    importCardLabel.style.background = '#6610f2';
+    importCardLabel.textContent = 'Import Card';
+    const importCardInput = document.createElement('input');
+    importCardInput.type = 'file';
+    importCardInput.accept = '.json,.jfcard';
+    importCardInput.style.display = 'none';
+    importCardInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        try {
+          const payload = JSON.parse(evt.target.result);
+          const newCard = cardTransfer.prepareImportedCard(payload, {
+            schema: state.schema,
+            schemaHash: state.schemaHash,
+            existingDeck: state.manifest.deck,
+            generateId,
+            validator: validateCardData
+          });
+          state.manifest.deck.push(newCard);
+          saveSession();
+          renderApp();
+        } catch (err) {
+          alert(err.message || 'Failed to import card');
+        } finally {
+          importCardInput.value = '';
+        }
+      };
+      reader.onerror = () => {
+        alert('Failed to read card file');
+        importCardInput.value = '';
+      };
+      reader.readAsText(file);
+    });
+    importCardLabel.appendChild(importCardInput);
+    importExport.appendChild(importCardLabel);
+  }
+
+  footer.appendChild(compareSummary);
+  footer.appendChild(compareActions);
+  footer.appendChild(importExport);
 }
 
 /** Multi-card radar overlay (one polygon per card). */
