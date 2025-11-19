@@ -1360,36 +1360,9 @@ function showCardModal(card) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function (evt) {
-      const dataUrl = evt.target.result;
-      const tmpImg = new Image();
-      tmpImg.onload = function () {
-        // Validate dimensions
-        if (
-          tmpImg.width !== state.schema.imageSpec.width ||
-          tmpImg.height !== state.schema.imageSpec.height
-        ) {
-          alert(
-            `Invalid image dimensions. Expected ${state.schema.imageSpec.width}x${state.schema.imageSpec.height}.`
-          );
-          return;
-        }
-        // Check for alpha channel (top-left pixel quick check)
-        const canvas = document.createElement('canvas');
-        canvas.width = tmpImg.width;
-        canvas.height = tmpImg.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(tmpImg, 0, 0);
-        const pixel = ctx.getImageData(0, 0, 1, 1).data;
-        if (!state.schema.imageSpec.alphaAllowed && pixel[3] !== 255) {
-          alert('Image must not contain transparency');
-          return;
-        }
-        // Accept the PNG data URL
-        imageData = dataUrl;
-        updateImagePreview();
-        imgInput.value = '';
-      };
-      tmpImg.src = dataUrl;
+      imageData = evt.target.result;
+      updateImagePreview();
+      imgInput.value = '';
     };
     reader.readAsDataURL(file);
   });
