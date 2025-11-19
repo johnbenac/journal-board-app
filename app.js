@@ -2730,8 +2730,14 @@ function exportCard(cardId) {
   const card = state.manifest.deck.find((c) => c.cardId === cardId);
   if (!card) return;
   const payload = cardTransfer.prepareCardExportPayload(
-    { schemaId: state.schema.schemaId, schemaHash: state.schemaHash },
-    card
+    {
+      schemaId: state.schema.schemaId,
+      schemaHash: state.schemaHash,
+      schema: state.schema
+    },
+    card,
+    undefined,
+    { includeFieldHints: true, includeEmptyFields: true, fillAllFields: true }
   );
   const fallback = card.cardId;
   const slug = slugifyForFilename(card.data.fullName, fallback);

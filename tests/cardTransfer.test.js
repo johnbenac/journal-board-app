@@ -42,6 +42,31 @@ test('prepareCardExportPayload captures schema metadata and card snapshot', () =
   assert.notStrictEqual(payload.card, card, 'card payload should be cloned');
 });
 
+test('prepareCardExportPayload can include all schema fields with hints', () => {
+  const minimalCard = {
+    cardId: 'card-blank',
+    image: '',
+    data: { fullName: 'Only Name' },
+    notes: []
+  };
+  const payload = prepareCardExportPayload(
+    { schemaId: schema.schemaId, schemaHash: 'hash123', schema },
+    minimalCard,
+    '2024-01-01T00:00:00.000Z'
+  );
+  assert.strictEqual(payload.version, '1.1');
+  schema.fields.forEach((field) => {
+    assert(
+      Object.prototype.hasOwnProperty.call(payload.card.data, field.id),
+      `missing ${field.id}`
+    );
+  });
+  assert(payload.fieldHints, 'fieldHints should be present');
+  assert(payload.fieldHints.fullName.type, 'field hint missing type');
+  assert(Array.isArray(payload.emptyFields), 'emptyFields should be present');
+  assert(payload.emptyFields.includes('tagline'), 'emptyFields should track blank values');
+});
+
 test('prepareImportedCard validates schema and uniqueness before returning normalized card', () => {
   const card = makeCard();
   const payload = prepareCardExportPayload(
