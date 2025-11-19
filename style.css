@@ -176,6 +176,27 @@ body {
   background: var(--success-hover);
 }
 
+.deck-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.schema-btn {
+  padding: 0.5rem 1rem;
+  background: var(--info);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.schema-btn:hover {
+  background: var(--info-hover);
+}
+
 /* Board styles */
 .slot-list {
   display: flex;
@@ -350,6 +371,36 @@ body {
 
 .modal .actions .delete-btn:hover {
   background: var(--danger-hover);
+}
+
+.schema-plan-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.schema-plan-section {
+  border: 1px solid var(--surface-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  background: var(--card-bg);
+}
+
+.schema-plan-section h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.schema-plan-section ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.schema-plan-warning {
+  color: var(--danger);
+  font-weight: 600;
 }
 
 /* Radar chart container */

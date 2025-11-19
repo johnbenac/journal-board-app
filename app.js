@@ -378,6 +378,17 @@ const state = {
 
 const cardTransfer = window.CardTransfer || null; // optional enhancement, not required
 
+if (!window.SchemaTools) {
+  throw new Error('Schema tools are required. Ensure schemaTools.js is loaded before app.js.');
+}
+
+const {
+  defaultValueForField,
+  sanitizeValueForField,
+  validateSchemaStructure,
+  diffSchemas
+} = window.SchemaTools;
+
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
  * @param {string} str
@@ -398,75 +409,118 @@ async function computeHash(str) {
  * Initialize the application: load schema, compute hash, load or create a session.
  */
 async function init() {
-  // Use embedded schema
-  const schema = EMBEDDED_SCHEMA;
-  state.schema = schema;
-  const schemaString = JSON.stringify(schema);
-  state.schemaHash = await computeHash(schemaString);
+  const baselineSchema = EMBEDDED_SCHEMA;
+  const baselineHash = await computeHash(JSON.stringify(baselineSchema));
 
-  // Load the manifest from localStorage if present
+  let manifest = null;
   const stored = localStorage.getItem('jf_session');
   if (stored) {
     try {
-      const manifest = JSON.parse(stored);
-      // Validate schema ID and hash
-      if (
-        manifest.schemaId === schema.schemaId &&
-        manifest.schemaHash === state.schemaHash
-      ) {
-        state.manifest = manifest;
-        state.compareSelection.clear();
-      } else {
-        // Schema mismatch – don't load, we'll show overlay later
-        state.manifest = manifest; // still load to allow import/export
-        state.compareSelection.clear();
-      }
-    } catch (e) {
-      console.error('Failed to parse stored session', e);
+      manifest = JSON.parse(stored);
+    } catch (err) {
+      console.error('Failed to parse stored session', err);
     }
   }
 
-  // If no valid manifest, create a new one using embedded defaults
-  if (!state.manifest || state.manifest.schemaHash !== state.schemaHash) {
-    const defaults = EMBEDDED_DEFAULTS;
-    const deck = defaults.map((card) => {
-      return {
-        cardId: card.cardId || generateId(),
-        image: card.image || '',
-        data: card.data,
-        notes: card.notes || []
-      };
-    });
-    state.manifest = {
-      manifestVersion: '1.0',
-      appVersion: '0.1',
-      schemaId: schema.schemaId,
-      schemaHash: state.schemaHash,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      deck,
-      board: {
-        boardId: 'default',
-        slots: [
-          { slotId: generateId(), name: 'Director' },
-          { slotId: generateId(), name: 'Secretary' },
-          { slotId: generateId(), name: 'Treasurer' }
-        ],
-        assignments: []
-      }
-    };
-    state.compareSelection.clear();
-    saveSession();
+  let activeSchema = baselineSchema;
+  let activeHash = baselineHash;
+  if (manifest && manifest.schema && manifest.schemaHash) {
+    activeSchema = manifest.schema;
+    activeHash = manifest.schemaHash;
   }
 
-  // Render the interface
+  state.schema = activeSchema;
+  state.schemaHash = activeHash;
+
+  if (!manifest) {
+    manifest = createDefaultManifest(activeSchema, activeHash);
+    state.manifest = manifest;
+    state.compareSelection.clear();
+    saveSession();
+    renderApp();
+    return;
+  }
+
+  let needsSave = false;
+  if (!Array.isArray(manifest.deck)) {
+    manifest.deck = [];
+    needsSave = true;
+  }
+  if (!manifest.board) {
+    manifest.board = createDefaultBoard();
+    needsSave = true;
+  }
+  if (!manifest.schema) {
+    if (manifest.schemaHash === baselineHash) {
+      manifest.schema = baselineSchema;
+    } else {
+      manifest.schema = activeSchema;
+    }
+    needsSave = true;
+  }
+  if (!manifest.schemaHash) {
+    manifest.schemaHash = activeHash;
+    needsSave = true;
+  }
+  if (!manifest.schemaId) {
+    manifest.schemaId = manifest.schema.schemaId || baselineSchema.schemaId;
+    needsSave = true;
+  }
+
+  state.manifest = manifest;
+  state.compareSelection.clear();
+  if (needsSave) {
+    saveSession();
+  }
   renderApp();
+}
+
+function createDefaultManifest(schema, schemaHash) {
+  const defaults = EMBEDDED_DEFAULTS;
+  const deck = defaults.map((card) => {
+    const clonedData = JSON.parse(JSON.stringify(card.data));
+    const clonedNotes = card.notes ? JSON.parse(JSON.stringify(card.notes)) : [];
+    return {
+      cardId: card.cardId || generateId(),
+      image: card.image || '',
+      data: clonedData,
+      notes: clonedNotes
+    };
+  });
+  return {
+    manifestVersion: '1.0',
+    appVersion: '0.1',
+    schemaId: schema.schemaId,
+    schemaHash,
+    schema,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    deck,
+    board: createDefaultBoard()
+  };
+}
+
+function createDefaultBoard() {
+  return {
+    boardId: 'default',
+    slots: [
+      { slotId: generateId(), name: 'Director' },
+      { slotId: generateId(), name: 'Secretary' },
+      { slotId: generateId(), name: 'Treasurer' }
+    ],
+    assignments: []
+  };
 }
 
 /**
  * Persist the current manifest to localStorage.
  */
 function saveSession() {
+  if (state.manifest && state.schema) {
+    state.manifest.schema = state.schema;
+    state.manifest.schemaHash = state.schemaHash;
+    state.manifest.schemaId = state.schema.schemaId;
+  }
   state.manifest.updatedAt = new Date().toISOString();
   localStorage.setItem('jf_session', JSON.stringify(state.manifest));
 }
@@ -495,25 +549,6 @@ function generateId() {
  */
 function renderApp() {
   const app = document.getElementById('app');
-  // Check schema mismatch; if mismatched, show overlay
-  if (state.manifest.schemaHash !== state.schemaHash) {
-    app.innerHTML = '';
-    const overlay = document.createElement('div');
-    overlay.className = 'error-overlay';
-    overlay.innerHTML = `<p>Your saved data was created with a different schema.</p><p>Current schema hash: ${state.schemaHash}<br/>Session schema hash: ${state.manifest.schemaHash}</p>`;
-    const btn = document.createElement('button');
-    btn.textContent = 'Reset & Start Fresh';
-    btn.addEventListener('click', () => {
-      localStorage.removeItem('jf_session');
-      location.reload();
-    });
-    overlay.appendChild(btn);
-    document.body.appendChild(overlay);
-    return;
-  }
-  // Clear previous overlay if exists
-  const existingOverlay = document.querySelector('.error-overlay');
-  if (existingOverlay) existingOverlay.remove();
 
   // Main container layout: deck and board
   app.innerHTML = '';
@@ -541,13 +576,25 @@ function renderDeck(container) {
   header.textContent = 'Card Deck';
   container.appendChild(header);
 
+  const controlsRow = document.createElement('div');
+  controlsRow.className = 'deck-controls';
   const addBtn = document.createElement('button');
   addBtn.className = 'add-card-btn';
   addBtn.textContent = 'Add Card';
   addBtn.addEventListener('click', () => {
     showCardModal(null);
   });
-  container.appendChild(addBtn);
+  controlsRow.appendChild(addBtn);
+
+  const schemaBtn = document.createElement('button');
+  schemaBtn.className = 'schema-btn';
+  schemaBtn.textContent = 'Edit Schema';
+  schemaBtn.addEventListener('click', () => {
+    showSchemaEditor();
+  });
+  controlsRow.appendChild(schemaBtn);
+
+  container.appendChild(controlsRow);
 
   const listDiv = document.createElement('div');
   listDiv.className = 'card-list';
@@ -644,6 +691,8 @@ function renderDeck(container) {
             json.schemaHash === state.schemaHash
           ) {
             state.manifest = json;
+            state.schema = json.schema || state.schema;
+            state.schemaHash = json.schemaHash;
             state.compareSelection.clear();
             saveSession();
             renderApp();
@@ -1736,6 +1785,283 @@ function renderBoardRadar(svg) {
 /**
  * Export the current session manifest as a JSON file.
  */
+/** --------------------------
+ * Schema editing helpers & UI
+ * --------------------------*/
+
+function showSchemaEditor() {
+  if (!state.schema) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Edit Schema';
+  modal.appendChild(title);
+
+  const description = document.createElement('p');
+  description.textContent = 'Update the JSON schema below. Changes will be applied to every card in this session.';
+  modal.appendChild(description);
+
+  const textarea = document.createElement('textarea');
+  textarea.value = JSON.stringify(state.schema, null, 2);
+  textarea.style.minHeight = '320px';
+  textarea.style.fontFamily = 'monospace';
+  textarea.spellcheck = false;
+  modal.appendChild(textarea);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+  actions.appendChild(cancelBtn);
+
+  const reviewBtn = document.createElement('button');
+  reviewBtn.className = 'save-btn';
+  reviewBtn.textContent = 'Review Changes';
+  reviewBtn.addEventListener('click', () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(textarea.value);
+    } catch (err) {
+      alert('Invalid JSON: ' + err.message);
+      return;
+    }
+    const errors = validateSchemaStructure(parsed);
+    if (errors.length) {
+      alert(errors.join('\n'));
+      return;
+    }
+    const previous = JSON.stringify(state.schema);
+    const nextStr = JSON.stringify(parsed);
+    if (previous === nextStr) {
+      alert('No schema changes detected.');
+      return;
+    }
+    document.body.removeChild(backdrop);
+    const plan = diffSchemas(state.schema, parsed);
+    showSchemaReviewModal(parsed, plan);
+  });
+  actions.appendChild(reviewBtn);
+
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+}
+
+function showSchemaReviewModal(nextSchema, plan) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Review Schema Changes';
+  modal.appendChild(title);
+
+  const summary = renderSchemaPlanSummary(plan);
+  modal.appendChild(summary);
+
+  const defaultsNote = document.createElement('p');
+  defaultsNote.textContent = 'New fields will be added to every existing card with blank values so you can fill them in later.';
+  modal.appendChild(defaultsNote);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'cancel-btn';
+  exportBtn.textContent = 'Export Backup';
+  exportBtn.addEventListener('click', () => {
+    exportSession();
+  });
+  actions.appendChild(exportBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+  actions.appendChild(cancelBtn);
+
+  const commitBtn = document.createElement('button');
+  commitBtn.className = 'save-btn';
+  commitBtn.textContent = 'Commit & Migrate';
+  const destructive = planHasDestructiveChanges(plan);
+  commitBtn.addEventListener('click', async () => {
+    if (destructive) {
+      const confirmed = confirm('This change removes or alters existing data. Continue?');
+      if (!confirmed) return;
+    }
+    commitBtn.disabled = true;
+    const originalText = commitBtn.textContent;
+    commitBtn.textContent = 'Applying…';
+    try {
+      await applySchemaChanges(nextSchema);
+      document.body.removeChild(backdrop);
+    } catch (err) {
+      console.error(err);
+      alert(err && err.message ? err.message : 'Failed to update schema.');
+      commitBtn.disabled = false;
+      commitBtn.textContent = originalText;
+    }
+  });
+  actions.appendChild(commitBtn);
+
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+}
+
+function renderSchemaPlanSummary(plan) {
+  const summary = document.createElement('div');
+  summary.className = 'schema-plan-summary';
+  const sections = [];
+  if (plan && Array.isArray(plan.added) && plan.added.length) {
+    sections.push({
+      title: 'Added fields',
+      items: plan.added.map((field) => `${field.label || field.id} (${field.id})`)
+    });
+  }
+  if (plan && Array.isArray(plan.removed) && plan.removed.length) {
+    sections.push({
+      title: 'Removed fields',
+      items: plan.removed.map((field) => `${field.label || field.id} (${field.id})`),
+      warning: true
+    });
+  }
+  if (plan && Array.isArray(plan.typeChanged) && plan.typeChanged.length) {
+    sections.push({
+      title: 'Type changes',
+      items: plan.typeChanged.map((change) => `${change.id}: ${change.from} → ${change.to}`),
+      warning: true
+    });
+  }
+  if (plan && Array.isArray(plan.itemTypeChanged) && plan.itemTypeChanged.length) {
+    sections.push({
+      title: 'List item type changes',
+      items: plan.itemTypeChanged.map((change) => `${change.id}: ${change.from || 'any'} → ${change.to || 'any'}`),
+      warning: true
+    });
+  }
+  if (plan && Array.isArray(plan.enumOptionsRemoved) && plan.enumOptionsRemoved.length) {
+    sections.push({
+      title: 'Enum option removals',
+      items: plan.enumOptionsRemoved.map((entry) => `${entry.id}: ${entry.removed.join(', ')}`),
+      warning: true
+    });
+  }
+  if (plan && Array.isArray(plan.rangeTightened) && plan.rangeTightened.length) {
+    sections.push({
+      title: 'Tightened number ranges',
+      items: plan.rangeTightened.map((entry) => `${entry.id}: ${entry.previous.min}–${entry.previous.max} → ${entry.next.min}–${entry.next.max}`),
+      warning: true
+    });
+  }
+  if (plan && Array.isArray(plan.otherUpdates) && plan.otherUpdates.length) {
+    sections.push({
+      title: 'Field property updates',
+      items: plan.otherUpdates.map((entry) => `${entry.id}: ${entry.changes.join(', ')}`)
+    });
+  }
+  if (plan && Array.isArray(plan.metaChanges) && plan.metaChanges.length) {
+    sections.push({
+      title: 'Metadata updates',
+      items: plan.metaChanges
+    });
+  }
+
+  sections.forEach((section) => {
+    const box = document.createElement('div');
+    box.className = 'schema-plan-section';
+    if (section.warning) {
+      box.classList.add('schema-plan-warning');
+    }
+    const heading = document.createElement('h3');
+    heading.textContent = section.title;
+    box.appendChild(heading);
+    const list = document.createElement('ul');
+    section.items.forEach((item) => {
+      const li = document.createElement('li');
+      li.textContent = item;
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    summary.appendChild(box);
+  });
+
+  if (!sections.length) {
+    const note = document.createElement('div');
+    note.textContent = 'No structural data changes detected. Cosmetic updates will still be saved.';
+    summary.appendChild(note);
+  }
+
+  if (planHasDestructiveChanges(plan)) {
+    const warning = document.createElement('div');
+    warning.className = 'schema-plan-warning';
+    warning.textContent = 'Destructive changes detected. Removing fields or tightening ranges will erase existing values.';
+    summary.appendChild(warning);
+  }
+
+  return summary;
+}
+
+function planHasDestructiveChanges(plan) {
+  if (!plan) return false;
+  return Boolean(
+    (plan.removed && plan.removed.length) ||
+      (plan.typeChanged && plan.typeChanged.length) ||
+      (plan.enumOptionsRemoved && plan.enumOptionsRemoved.length) ||
+      (plan.itemTypeChanged && plan.itemTypeChanged.length) ||
+      (plan.rangeTightened && plan.rangeTightened.length)
+  );
+}
+
+async function applySchemaChanges(nextSchema) {
+  if (!nextSchema || !Array.isArray(nextSchema.fields)) {
+    throw new Error('Schema must include a fields array.');
+  }
+  if (!state.manifest) {
+    throw new Error('Session manifest not available.');
+  }
+  const deck = state.manifest.deck || [];
+  const validIds = new Set(nextSchema.fields.map((field) => field.id));
+  deck.forEach((card) => {
+    if (!card.data || typeof card.data !== 'object') {
+      card.data = {};
+    }
+    Object.keys(card.data).forEach((key) => {
+      if (!validIds.has(key)) {
+        delete card.data[key];
+      }
+    });
+    nextSchema.fields.forEach((field) => {
+      if (card.data[field.id] === undefined) {
+        card.data[field.id] = defaultValueForField(field);
+      }
+      card.data[field.id] = sanitizeValueForField(field, card.data[field.id]);
+    });
+  });
+
+  state.schema = nextSchema;
+  const nextHash = await computeHash(JSON.stringify(nextSchema));
+  state.schemaHash = nextHash;
+  state.manifest.schema = nextSchema;
+  state.manifest.schemaHash = nextHash;
+  state.manifest.schemaId = nextSchema.schemaId || state.manifest.schemaId;
+  saveSession();
+  renderApp();
+}
+
 function exportSession() {
   downloadJson(state.manifest, 'journal_session.jfpack');
 }
