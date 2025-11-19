@@ -275,6 +275,10 @@ body {
   justify-content: center;
 }
 
+.radar-container svg {
+  overflow: visible;
+}
+
 /* Error overlay */
 .error-overlay {
   position: fixed;
