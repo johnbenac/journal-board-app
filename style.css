@@ -363,6 +363,11 @@ body {
   overflow: visible;
 }
 
+.radar-container text {
+  fill: var(--text-color);
+  font-weight: 600;
+}
+
 /* Error overlay */
 .error-overlay {
   position: fixed;
