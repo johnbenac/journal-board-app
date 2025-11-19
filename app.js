@@ -374,6 +374,11 @@ const state = {
   manifest: null
 };
 
+const cardTransfer = window.CardTransfer;
+if (!cardTransfer) {
+  throw new Error('Card transfer utilities failed to load.');
+}
+
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
  * @param {string} str
@@ -568,6 +573,12 @@ function renderDeck(container) {
       showCardModal(card);
     });
     item.appendChild(editBtn);
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export';
+    exportBtn.addEventListener('click', () => {
+      exportCard(card.cardId);
+    });
+    item.appendChild(exportBtn);
     // delete button
     const delBtn = document.createElement('button');
     delBtn.textContent = 'Delete';
@@ -631,6 +642,48 @@ function renderDeck(container) {
   });
   importLabel.appendChild(importInput);
   controls.appendChild(importLabel);
+
+  const importCardLabel = document.createElement('label');
+  importCardLabel.style.display = 'inline-block';
+  importCardLabel.style.marginLeft = '0.5rem';
+  importCardLabel.className = 'add-card-btn';
+  importCardLabel.style.background = '#6610f2';
+  importCardLabel.textContent = 'Import Card';
+  const importCardInput = document.createElement('input');
+  importCardInput.type = 'file';
+  importCardInput.accept = '.json,.jfcard';
+  importCardInput.style.display = 'none';
+  importCardInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+      try {
+        const payload = JSON.parse(evt.target.result);
+        const newCard = cardTransfer.prepareImportedCard(payload, {
+          schema: state.schema,
+          schemaHash: state.schemaHash,
+          existingDeck: state.manifest.deck,
+          generateId,
+          validator: validateCardData
+        });
+        state.manifest.deck.push(newCard);
+        saveSession();
+        renderApp();
+      } catch (err) {
+        alert(err.message || 'Failed to import card');
+      } finally {
+        importCardInput.value = '';
+      }
+    };
+    reader.onerror = () => {
+      alert('Failed to read card file');
+      importCardInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+  importCardLabel.appendChild(importCardInput);
+  controls.appendChild(importCardLabel);
   container.appendChild(controls);
 }
 
@@ -1308,12 +1361,34 @@ function renderBoardRadar(svg) {
  * Export the current session manifest as a JSON file.
  */
 function exportSession() {
-  const dataStr = JSON.stringify(state.manifest, null, 2);
+  downloadJson(state.manifest, 'journal_session.jfpack');
+}
+
+function exportCard(cardId) {
+  const card = state.manifest.deck.find((c) => c.cardId === cardId);
+  if (!card) return;
+  const payload = cardTransfer.prepareCardExportPayload(
+    { schemaId: state.schema.schemaId, schemaHash: state.schemaHash },
+    card
+  );
+  const fallback = card.cardId;
+  const slug = slugifyForFilename(card.data.fullName, fallback);
+  downloadJson(payload, `${slug}.jfcard`);
+}
+
+function slugifyForFilename(name, fallback) {
+  if (!name) return fallback;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || fallback;
+}
+
+function downloadJson(data, filename) {
+  const dataStr = JSON.stringify(data, null, 2);
   const blob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'journal_session.jfpack';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {
