@@ -966,19 +966,44 @@ function showCardModal(card) {
   const imgGroup = document.createElement('div');
   imgGroup.className = 'field-group';
   const imgLabel = document.createElement('label');
-  imgLabel.textContent = 'Image (PNG 750x1050)';
+  imgLabel.textContent = 'Image (PNG will be resized to 750x1050)';
   const imgInput = document.createElement('input');
   imgInput.type = 'file';
   imgInput.accept = 'image/png';
-  imgInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-      const dataUrl = evt.target.result;
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.textContent = 'Edit Image';
+  editBtn.style.marginTop = '0.5rem';
+  editBtn.disabled = !imageData;
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function openEditorWithSource(source) {
+    if (window.ImageEditor && typeof window.ImageEditor.open === 'function') {
+      return window.ImageEditor.open({
+        source,
+        target: {
+          width: state.schema.imageSpec.width,
+          height: state.schema.imageSpec.height,
+        },
+        background: '#ffffff',
+      });
+    }
+    if (typeof source === 'string') return Promise.resolve(source);
+    return readFileAsDataURL(source);
+  }
+
+  function verifyImageOutput(dataUrl) {
+    return new Promise((resolve, reject) => {
       const tmpImg = new Image();
       tmpImg.onload = function () {
-        // Validate dimensions
         if (
           tmpImg.width !== state.schema.imageSpec.width ||
           tmpImg.height !== state.schema.imageSpec.height
@@ -986,9 +1011,9 @@ function showCardModal(card) {
           alert(
             `Invalid image dimensions. Expected ${state.schema.imageSpec.width}x${state.schema.imageSpec.height}.`
           );
+          reject(new Error('Invalid image dimensions'));
           return;
         }
-        // Check for alpha channel transparency on top-left pixel
         const canvas = document.createElement('canvas');
         canvas.width = tmpImg.width;
         canvas.height = tmpImg.height;
@@ -997,17 +1022,47 @@ function showCardModal(card) {
         const pixel = ctx.getImageData(0, 0, 1, 1).data;
         if (!state.schema.imageSpec.alphaAllowed && pixel[3] !== 255) {
           alert('Image must not contain transparency');
+          reject(new Error('Transparency detected'));
           return;
         }
-        // Use the provided dataUrl directly (already base64 PNG)
-        imageData = dataUrl;
+        resolve(dataUrl);
       };
+      tmpImg.onerror = () => reject(new Error('Failed to verify image'));
       tmpImg.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+    });
+  }
+
+  function processImageSource(source) {
+    openEditorWithSource(source)
+      .then((dataUrl) => verifyImageOutput(dataUrl))
+      .then((verifiedUrl) => {
+        imageData = verifiedUrl;
+        editBtn.disabled = !imageData;
+      })
+      .catch((err) => {
+        if (!err || !/cancel/i.test(err.message || '')) {
+          console.error(err);
+        }
+      })
+      .finally(() => {
+        imgInput.value = '';
+      });
+  }
+
+  imgInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    processImageSource(file);
   });
+
+  editBtn.addEventListener('click', () => {
+    if (!imageData) return;
+    processImageSource(imageData);
+  });
+
   imgLabel.appendChild(imgInput);
   imgGroup.appendChild(imgLabel);
+  imgGroup.appendChild(editBtn);
   form.appendChild(imgGroup);
 
   // Notes section

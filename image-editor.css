@@ -1,0 +1,94 @@
+.ie-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 2000;
+}
+
+.ie-dialog {
+  background: #fff;
+  width: min(960px, 95vw);
+  max-height: 95vh;
+  display: grid;
+  grid-template-columns: minmax(400px, 1fr) 260px;
+  gap: 1rem;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.ie-stage {
+  background: #121212;
+  border-radius: 10px;
+  padding: 0.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ie-stage canvas {
+  width: 100%;
+  height: auto;
+  max-height: 80vh;
+  border-radius: 10px;
+}
+
+.ie-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ie-controls h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.ie-control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ie-button-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.ie-controls button {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #f4f4f4;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.ie-controls button.primary {
+  background: #2563eb;
+  border-color: #1e4ed8;
+  color: #fff;
+}
+
+.ie-controls button.danger {
+  background: #f87171;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.ie-slider {
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .ie-dialog {
+    grid-template-columns: 1fr;
+    max-height: 100vh;
+  }
+  .ie-controls {
+    flex-direction: column;
+  }
+}
