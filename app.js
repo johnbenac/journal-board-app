@@ -884,6 +884,7 @@ function showCardModal(card) {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.value = opt;
+        cb.dataset.fieldId = field.id;
         if (Array.isArray(cardData[field.id]) && cardData[field.id].includes(opt)) cb.checked = true;
         cbWrapper.appendChild(cb);
         cbWrapper.appendChild(document.createTextNode(opt));
@@ -1042,7 +1043,9 @@ function showCardModal(card) {
     } else if (fieldDef.type === 'enum') {
       value = target.value;
     } else if (fieldDef.type === 'multi-select') {
-      const checkboxes = Array.from(target.parentElement.querySelectorAll('input[type="checkbox"]'));
+      const checkboxes = Array.from(
+        form.querySelectorAll(`input[type="checkbox"][data-field-id="${fieldId}"]`)
+      );
       value = checkboxes.filter((cb) => cb.checked).map((cb) => cb.value);
     } else if (fieldDef.type === 'list') {
       value = target.value.split(/\n+/).map((s) => s.trim()).filter(Boolean);
@@ -1090,18 +1093,30 @@ function showCardModal(card) {
   function handleSave() {
     const errs = validateCardData(state.schema, cardData);
     if (errs.length) {
+      const categoriesField = state.schema.fields.find((f) => f.id === 'categories');
+
       if (console.groupCollapsed) {
         console.groupCollapsed('Card validation failed');
       } else {
         console.error('Card validation failed');
       }
+
       console.error('Validation errors:', errs);
-      console.debug('Card data attempting to save:', JSON.parse(JSON.stringify(cardData)));
+      console.info('Mode:', isNew ? 'create' : 'update');
+      console.info('Card id:', card ? card.cardId : '(new)');
+      console.info('Full name:', cardData.fullName || '(missing fullName)');
+      console.debug('Card data snapshot:', JSON.parse(JSON.stringify(cardData)));
       console.debug('Active schema info:', {
         schemaId: state.schema.schemaId,
         schemaVersion: state.schema.schemaVersion,
         schemaHash: state.schemaHash
       });
+
+      if (categoriesField) {
+        console.info('Category selections:', cardData.categories || []);
+        console.info('Allowed category options:', categoriesField.options);
+      }
+
       if (console.groupEnd) {
         console.groupEnd();
       }
