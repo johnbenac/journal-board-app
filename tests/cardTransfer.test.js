@@ -42,6 +42,32 @@ test('prepareCardExportPayload captures schema metadata and card snapshot', () =
   assert.notStrictEqual(payload.card, card, 'card payload should be cloned');
 });
 
+test('prepareCardExportPayload fills all fields and adds hints when schema is supplied', () => {
+  const payload = prepareCardExportPayload(
+    { schemaId: schema.schemaId, schemaHash: 'hash123', schema },
+    {
+      cardId: 'card-min',
+      image: '',
+      data: { fullName: 'Minimal' },
+      notes: []
+    },
+    '2023-01-01T00:00:00.000Z'
+  );
+
+  assert.strictEqual(payload.version, '1.1');
+  schema.fields.forEach((field) => {
+    assert(
+      Object.prototype.hasOwnProperty.call(payload.card.data, field.id),
+      `missing field ${field.id}`
+    );
+  });
+  assert(payload.fieldHints);
+  assert.strictEqual(payload.fieldHints.availability.type, 'enum');
+  assert(Array.isArray(payload.emptyFields));
+  assert(payload.emptyFields.includes('tagline'));
+  assert.strictEqual(payload.card.data.fullName, 'Minimal');
+});
+
 test('prepareImportedCard validates schema and uniqueness before returning normalized card', () => {
   const card = makeCard();
   const payload = prepareCardExportPayload(
