@@ -966,48 +966,48 @@ function showCardModal(card) {
   const imgGroup = document.createElement('div');
   imgGroup.className = 'field-group';
   const imgLabel = document.createElement('label');
-  imgLabel.textContent = 'Image (PNG 750x1050)';
+  imgLabel.textContent = 'Image (PNG — exported at 750x1050)';
   const imgInput = document.createElement('input');
   imgInput.type = 'file';
   imgInput.accept = 'image/png';
+  const imageSpec = state.schema.imageSpec || { width: 750, height: 1050 };
+  function openImageEditor(source) {
+    if (!window.ImageEditor || typeof window.ImageEditor.open !== 'function') {
+      alert('Image editor is unavailable.');
+      return Promise.reject(new Error('Image editor unavailable'));
+    }
+    return window.ImageEditor
+      .open({
+        source,
+        target: { width: imageSpec.width, height: imageSpec.height },
+        background: '#ffffff',
+      })
+      .then((dataUrl) => {
+        imageData = dataUrl;
+        editBtn.disabled = !imageData;
+      });
+  }
   imgInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-      const dataUrl = evt.target.result;
-      const tmpImg = new Image();
-      tmpImg.onload = function () {
-        // Validate dimensions
-        if (
-          tmpImg.width !== state.schema.imageSpec.width ||
-          tmpImg.height !== state.schema.imageSpec.height
-        ) {
-          alert(
-            `Invalid image dimensions. Expected ${state.schema.imageSpec.width}x${state.schema.imageSpec.height}.`
-          );
-          return;
-        }
-        // Check for alpha channel transparency on top-left pixel
-        const canvas = document.createElement('canvas');
-        canvas.width = tmpImg.width;
-        canvas.height = tmpImg.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(tmpImg, 0, 0);
-        const pixel = ctx.getImageData(0, 0, 1, 1).data;
-        if (!state.schema.imageSpec.alphaAllowed && pixel[3] !== 255) {
-          alert('Image must not contain transparency');
-          return;
-        }
-        // Use the provided dataUrl directly (already base64 PNG)
-        imageData = dataUrl;
-      };
-      tmpImg.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+    openImageEditor(file).catch(() => {});
+  });
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.textContent = 'Edit Image';
+  editBtn.disabled = !imageData;
+  editBtn.style.marginTop = '0.5rem';
+  editBtn.addEventListener('click', () => {
+    const source = imageData || (imgInput.files && imgInput.files[0]);
+    if (!source) {
+      imgInput.click();
+      return;
+    }
+    openImageEditor(source).catch(() => {});
   });
   imgLabel.appendChild(imgInput);
   imgGroup.appendChild(imgLabel);
+  imgGroup.appendChild(editBtn);
   form.appendChild(imgGroup);
 
   // Notes section

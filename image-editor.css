@@ -1,0 +1,108 @@
+.ie-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 3000;
+  padding: 1rem;
+}
+
+.ie-dialog {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  width: min(960px, 95vw);
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  max-height: 95vh;
+}
+
+.ie-stage {
+  background: #0e0e0e;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  padding: 0.5rem;
+}
+
+.ie-stage canvas {
+  width: 100%;
+  height: auto;
+  max-height: 80vh;
+  display: block;
+}
+
+.ie-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+}
+
+.ie-controls h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.ie-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ie-slider label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ie-slider span {
+  font-weight: 400;
+}
+
+.ie-slider input[type='range'] {
+  width: 100%;
+}
+
+.ie-button-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.ie-controls button {
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  background: #f0f0f0;
+}
+
+.ie-controls button.primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.ie-controls button.danger {
+  background: #9b1c1c;
+  color: #fff;
+}
+
+.ie-controls button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 860px) {
+  .ie-dialog {
+    grid-template-columns: 1fr;
+  }
+  .ie-controls {
+    padding-top: 0;
+  }
+}
