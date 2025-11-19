@@ -444,9 +444,9 @@ async function init() {
       board: {
         boardId: 'default',
         slots: [
-          { slotId: 'director', name: 'Director' },
-          { slotId: 'secretary', name: 'Secretary' },
-          { slotId: 'treasurer', name: 'Treasurer' }
+          { slotId: generateId(), name: 'Director' },
+          { slotId: generateId(), name: 'Secretary' },
+          { slotId: generateId(), name: 'Treasurer' }
         ],
         assignments: []
       }
@@ -724,22 +724,37 @@ function renderBoard(container) {
     const title = document.createElement('span');
     title.textContent = slot.name;
     slotHeader.appendChild(title);
-    // Delete slot button if not default
-    if (!['director', 'secretary', 'treasurer'].includes(slot.slotId)) {
-      const removeSlotBtn = document.createElement('button');
-      removeSlotBtn.textContent = 'Delete Slot';
-      removeSlotBtn.style.background = '#dc3545';
-      removeSlotBtn.style.color = '#fff';
-      removeSlotBtn.style.border = 'none';
-      removeSlotBtn.style.padding = '0.25rem 0.5rem';
-      removeSlotBtn.style.fontSize = '0.75rem';
-      removeSlotBtn.addEventListener('click', () => {
-        if (confirm('Delete this slot? Assignments will be removed.')) {
-          deleteSlot(slot.slotId);
-        }
-      });
-      slotHeader.appendChild(removeSlotBtn);
-    }
+
+    // Rename slot
+    const renameSlotBtn = document.createElement('button');
+    renameSlotBtn.textContent = 'Rename';
+    renameSlotBtn.style.background = '#6c757d';
+    renameSlotBtn.style.color = '#fff';
+    renameSlotBtn.style.border = 'none';
+    renameSlotBtn.style.padding = '0.25rem 0.5rem';
+    renameSlotBtn.style.fontSize = '0.75rem';
+    renameSlotBtn.addEventListener('click', () => {
+      const newName = prompt('Rename slot', slot.name);
+      if (newName && newName.trim()) {
+        renameSlot(slot.slotId, newName.trim());
+      }
+    });
+    slotHeader.appendChild(renameSlotBtn);
+
+    // Delete slot (available for all slots)
+    const removeSlotBtn = document.createElement('button');
+    removeSlotBtn.textContent = 'Delete Slot';
+    removeSlotBtn.style.background = '#dc3545';
+    removeSlotBtn.style.color = '#fff';
+    removeSlotBtn.style.border = 'none';
+    removeSlotBtn.style.padding = '0.25rem 0.5rem';
+    removeSlotBtn.style.fontSize = '0.75rem';
+    removeSlotBtn.addEventListener('click', () => {
+      if (confirm('Delete this slot? Assignments will be removed.')) {
+        deleteSlot(slot.slotId);
+      }
+    });
+    slotHeader.appendChild(removeSlotBtn);
     slotDiv.appendChild(slotHeader);
 
     // Assigned list
@@ -817,8 +832,10 @@ function renderBoard(container) {
  * @param {string} name
  */
 function addSlot(name) {
-  const slotId = name.toLowerCase().replace(/\s+/g, '-');
-  state.manifest.board.slots.push({ slotId, name });
+  const clean = name.trim();
+  if (!clean) return;
+  const slotId = generateId();
+  state.manifest.board.slots.push({ slotId, name: clean });
   saveSession();
   renderApp();
 }
@@ -832,6 +849,21 @@ function deleteSlot(slotId) {
   state.manifest.board.assignments = state.manifest.board.assignments.filter(
     (a) => a.slotId !== slotId
   );
+  saveSession();
+  renderApp();
+}
+
+/**
+ * Rename a slot.
+ * @param {string} slotId
+ * @param {string} name
+ */
+function renameSlot(slotId, name) {
+  const clean = name.trim();
+  if (!clean) return;
+  const slot = state.manifest.board.slots.find((s) => s.slotId === slotId);
+  if (!slot) return;
+  slot.name = clean;
   saveSession();
   renderApp();
 }
