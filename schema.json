@@ -1,6 +1,6 @@
 {
   "schemaName": "JournalBoardCardSchema",
-  "schemaVersion": "2025-11-17",
+  "schemaVersion": "2025-12-01",
   "schemaId": "journal.cards.v1",
   "imageSpec": {
     "format": "png",
@@ -145,6 +145,16 @@
         "Interested",
         "Committed"
       ]
+    },
+    {
+      "id": "crmContactId",
+      "label": "CRM Contact ID",
+      "type": "string"
+    },
+    {
+      "id": "crmContactUrl",
+      "label": "CRM Link",
+      "type": "url"
     },
     {
       "id": "sources",
