@@ -1,10 +1,79 @@
 /* Basic styles for the Journal Foundation Board Builder */
 
+:root {
+  color-scheme: light dark;
+  --bg-color: #f9f9f9;
+  --text-color: #1f1f1f;
+  --surface-color: #ffffff;
+  --surface-border: #dddddd;
+  --muted-border: #cccccc;
+  --card-bg: #fafafa;
+  --slot-bg: #f8f8f8;
+  --input-bg: #ffffff;
+  --input-border: #cccccc;
+  --muted-text: #555555;
+  --image-placeholder: #e6e6e6;
+  --sticky-bg: #ffffff;
+  --table-header-bg: #fafafa;
+  --difference-bg: #fffceb;
+  --compare-table-border: #f0f0f0;
+  --error-overlay-bg: rgba(255, 0, 0, 0.1);
+  --error-text-color: #721c24;
+  --surface-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+  --sticky-shadow: 0 -2px 6px rgba(0, 0, 0, 0.03);
+
+  --primary: #007bff;
+  --primary-hover: #0056b3;
+  --secondary: #6c757d;
+  --secondary-hover: #5a6268;
+  --success: #28a745;
+  --success-hover: #1e7e34;
+  --info: #17a2b8;
+  --info-hover: #117a8b;
+  --danger: #dc3545;
+  --danger-hover: #c82333;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #0f1115;
+    --text-color: #f4f4f5;
+    --surface-color: #1c212b;
+    --surface-border: #2d3341;
+    --muted-border: #3a4252;
+    --card-bg: #222837;
+    --slot-bg: #232a3a;
+    --input-bg: #12151c;
+    --input-border: #353d4c;
+    --muted-text: #c2cadb;
+    --image-placeholder: #2f3547;
+    --sticky-bg: #1c212b;
+    --table-header-bg: #262d3d;
+    --difference-bg: #2d2c1f;
+    --compare-table-border: #333a49;
+    --error-overlay-bg: rgba(220, 53, 69, 0.15);
+    --error-text-color: #f8d7da;
+    --surface-shadow: 0 18px 35px rgba(0, 0, 0, 0.5);
+    --sticky-shadow: 0 -10px 25px rgba(0, 0, 0, 0.4);
+
+    --primary: #6ea8ff;
+    --primary-hover: #8bbaff;
+    --secondary: #8b93a5;
+    --secondary-hover: #a0a6b6;
+    --success: #4fd38f;
+    --success-hover: #6be1a6;
+    --info: #4cc9f0;
+    --info-hover: #72d9ff;
+    --danger: #ff6b81;
+    --danger-hover: #ff8ea0;
+  }
+}
+
 body {
   margin: 0;
   font-family: Arial, sans-serif;
-  background: #f9f9f9;
-  color: #333;
+  background: var(--bg-color);
+  color: var(--text-color);
 }
 
 #app {
@@ -20,24 +89,24 @@ body {
 /* Sidebar for deck */
 .deck {
   flex: 1 1 50%;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--surface-color);
+  border: 1px solid var(--surface-border);
   border-radius: 4px;
   padding: 1rem;
   overflow-y: auto;
   max-height: calc(100vh - 2rem);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--surface-shadow);
 }
 
 .board {
   flex: 1 1 50%;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--surface-color);
+  border: 1px solid var(--surface-border);
   border-radius: 4px;
   padding: 1rem;
   overflow-y: auto;
   max-height: calc(100vh - 2rem);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--surface-shadow);
 }
 
 .section-title {
@@ -53,10 +122,10 @@ body {
 }
 
 .card-item {
-  border: 1px solid #ccc;
+  border: 1px solid var(--muted-border);
   border-radius: 4px;
   padding: 0.5rem;
-  background: #fafafa;
+  background: var(--card-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -67,7 +136,7 @@ body {
   width: 100%;
   height: 180px;
   object-fit: cover;
-  background: #e6e6e6;
+  background: var(--image-placeholder);
   border-radius: 2px;
 }
 
@@ -80,7 +149,7 @@ body {
 .card-item button {
   margin-top: 0.25rem;
   padding: 0.25rem 0.5rem;
-  background: #007bff;
+  background: var(--primary);
   color: #fff;
   border: none;
   border-radius: 2px;
@@ -89,13 +158,13 @@ body {
 }
 
 .card-item button:hover {
-  background: #0056b3;
+  background: var(--primary-hover);
 }
 
 .add-card-btn {
   margin-bottom: 0.5rem;
   padding: 0.5rem 1rem;
-  background: #28a745;
+  background: var(--success);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -104,7 +173,7 @@ body {
 }
 
 .add-card-btn:hover {
-  background: #1e7e34;
+  background: var(--success-hover);
 }
 
 /* Board styles */
@@ -115,10 +184,10 @@ body {
 }
 
 .slot-item {
-  border: 1px solid #ccc;
+  border: 1px solid var(--muted-border);
   border-radius: 4px;
   padding: 0.5rem;
-  background: #f8f8f8;
+  background: var(--slot-bg);
 }
 
 .slot-header {
@@ -131,9 +200,10 @@ body {
 .assign-select {
   width: 100%;
   padding: 0.25rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--input-border);
   border-radius: 2px;
-  background: #fff;
+  background: var(--input-bg);
+  color: var(--text-color);
 }
 
 .assigned-list {
@@ -155,7 +225,7 @@ body {
 
 .assigned-list button {
   padding: 0.15rem 0.3rem;
-  background: #dc3545;
+  background: var(--danger);
   color: #fff;
   border: none;
   border-radius: 2px;
@@ -164,13 +234,13 @@ body {
 }
 
 .assigned-list button:hover {
-  background: #c82333;
+  background: var(--danger-hover);
 }
 
 .add-slot-btn {
   margin-top: 0.5rem;
   padding: 0.5rem 1rem;
-  background: #17a2b8;
+  background: var(--info);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -179,7 +249,7 @@ body {
 }
 
 .add-slot-btn:hover {
-  background: #117a8b;
+  background: var(--info-hover);
 }
 
 /* Modal styles */
@@ -197,7 +267,7 @@ body {
 }
 
 .modal {
-  background: #fff;
+  background: var(--surface-color);
   padding: 1rem;
   border-radius: 4px;
   width: 600px;
@@ -229,9 +299,11 @@ body {
 .modal select,
 .modal textarea {
   padding: 0.25rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--input-border);
   border-radius: 2px;
   font-size: 0.9rem;
+  background: var(--input-bg);
+  color: var(--text-color);
 }
 
 .modal .field-group {
@@ -254,18 +326,30 @@ body {
 }
 
 .modal .actions .save-btn {
-  background: #28a745;
+  background: var(--success);
   color: #fff;
+}
+
+.modal .actions .save-btn:hover {
+  background: var(--success-hover);
 }
 
 .modal .actions .cancel-btn {
-  background: #6c757d;
+  background: var(--secondary);
   color: #fff;
 }
 
+.modal .actions .cancel-btn:hover {
+  background: var(--secondary-hover);
+}
+
 .modal .actions .delete-btn {
-  background: #dc3545;
+  background: var(--danger);
   color: #fff;
+}
+
+.modal .actions .delete-btn:hover {
+  background: var(--danger-hover);
 }
 
 /* Radar chart container */
@@ -286,13 +370,13 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(255, 0, 0, 0.1);
+  background: var(--error-overlay-bg);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 2000;
-  color: #721c24;
+  color: var(--error-text-color);
   font-size: 1.2rem;
   padding: 2rem;
   text-align: center;
@@ -300,7 +384,7 @@ body {
 .error-overlay button {
   margin-top: 1rem;
   padding: 0.5rem 1rem;
-  background: #dc3545;
+  background: var(--danger);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -308,14 +392,14 @@ body {
 }
 
 .error-overlay button:hover {
-  background: #c82333;
+  background: var(--danger-hover);
 }
 /* ------------ Compare Mode UI ------------ */
 
 .compare-toggle {
   margin-top: 0.25rem;
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted-text);
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -331,14 +415,14 @@ body {
   gap: 0.5rem;
   margin-top: 0.75rem;
   padding: 0.5rem 0.6rem;
-  background: #fff;
-  border-top: 1px solid #ddd;
-  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.03);
+  background: var(--sticky-bg);
+  border-top: 1px solid var(--surface-border);
+  box-shadow: var(--sticky-shadow);
   z-index: 5;
 }
 
 .compare-bar .btn-primary {
-  background: #007bff;
+  background: var(--primary);
   color: #fff;
   border: none;
   border-radius: 3px;
@@ -350,8 +434,11 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.compare-bar .btn-primary:not(:disabled):hover {
+  background: var(--primary-hover);
+}
 .compare-bar .btn-secondary {
-  background: #6c757d;
+  background: var(--secondary);
   color: #fff;
   border: none;
   border-radius: 3px;
@@ -363,10 +450,13 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.compare-bar .btn-secondary:not(:disabled):hover {
+  background: var(--secondary-hover);
+}
 
 .compare-summary {
   font-size: 0.9rem;
-  color: #333;
+  color: var(--text-color);
 }
 
 /* Legend in the compare modal */
@@ -395,7 +485,7 @@ body {
 .compare-table-wrap {
   max-height: 40vh;
   overflow: auto;
-  border: 1px solid #eee;
+  border: 1px solid var(--surface-border);
   border-radius: 4px;
 }
 .compare-table {
@@ -406,17 +496,17 @@ body {
 .compare-table th,
 .compare-table td {
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--compare-table-border);
   vertical-align: top;
 }
 .compare-table thead th {
   position: sticky;
   top: 0;
-  background: #fafafa;
+  background: var(--table-header-bg);
   z-index: 1;
 }
 .row-diff {
-  background: #fffceb; /* soft highlight for differences */
+  background: var(--difference-bg); /* soft highlight for differences */
 }
 
 .diffs-toggle {
@@ -425,4 +515,5 @@ body {
   gap: 0.4rem;
   margin: 0.5rem 0;
   font-size: 0.9rem;
+  color: var(--muted-text);
 }
