@@ -1,7 +1,7 @@
 .ie-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--ie-backdrop);
   display: grid;
   place-items: center;
   z-index: 3000;
@@ -9,7 +9,7 @@
 }
 
 .ie-dialog {
-  background: #fff;
+  background: var(--ie-dialog-bg);
   width: min(960px, 95vw);
   max-height: 95vh;
   padding: 1rem;
@@ -29,7 +29,7 @@
 }
 
 .ie-stage {
-  background: #0f0f0f;
+  background: var(--ie-stage-bg);
   border-radius: 10px;
   padding: 1rem;
   display: flex;
@@ -42,7 +42,7 @@
   height: auto;
   max-height: 75vh;
   border-radius: 8px;
-  background: #000;
+  background: var(--ie-stage-canvas-bg);
 }
 
 .ie-controls {
@@ -52,7 +52,7 @@
 }
 
 .ie-controls fieldset {
-  border: 1px solid #ddd;
+  border: 1px solid var(--ie-control-border);
   border-radius: 8px;
   padding: 0.75rem;
 }
@@ -76,22 +76,23 @@
 .ie-controls button {
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
-  border: 1px solid #999;
-  background: #fff;
+  border: 1px solid var(--ie-button-border);
+  background: var(--ie-button-bg);
   cursor: pointer;
   font-size: 0.9rem;
+  color: var(--ie-button-text);
 }
 
 .ie-controls button.primary {
-  background: #222;
-  color: #fff;
-  border-color: #222;
+  background: var(--ie-button-primary-bg);
+  color: var(--ie-button-primary-text);
+  border-color: var(--ie-button-primary-bg);
 }
 
 .ie-controls button.danger {
-  background: #fff0f0;
-  border-color: #d33;
-  color: #a00;
+  background: var(--ie-button-danger-bg);
+  border-color: var(--ie-button-danger-border);
+  color: var(--ie-button-danger-text);
 }
 
 .ie-controls button:disabled {
@@ -101,5 +102,5 @@
 
 .ie-grid-preview {
   font-size: 0.8rem;
-  color: #555;
+  color: var(--ie-grid-text);
 }

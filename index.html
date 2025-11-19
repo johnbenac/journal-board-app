@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Journal Foundation Board Builder</title>
+    <script>
+      (function () {
+        const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const applyTheme = () => {
+          document.documentElement.classList.toggle('dark-theme', darkQuery.matches);
+        };
+        applyTheme();
+        if (typeof darkQuery.addEventListener === 'function') {
+          darkQuery.addEventListener('change', applyTheme);
+        } else if (typeof darkQuery.addListener === 'function') {
+          darkQuery.addListener(applyTheme);
+        }
+      })();
+    </script>
     <!-- Link to the external stylesheet for styling -->
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="image-editor.css" />
