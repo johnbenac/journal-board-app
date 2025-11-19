@@ -578,23 +578,35 @@ body {
   gap: 0.35rem;
 }
 
-/* Sticky bar at the bottom of the Deck panel */
-.compare-bar {
+/* Sticky footer at the bottom of the Deck panel */
+.deck-footer {
   position: sticky;
   bottom: -1px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-top: 0.75rem;
-  padding: 0.5rem 0.6rem;
+  padding: 0.75rem 0.8rem;
   background: var(--sticky-bg);
   border-top: 1px solid var(--surface-border);
   box-shadow: var(--sticky-shadow);
   z-index: 5;
 }
 
-.compare-bar .btn-primary {
+.deck-footer-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.deck-footer .session-actions {
+  margin-left: auto;
+}
+
+.deck-footer .btn-primary {
   background: var(--primary);
   color: #fff;
   border: none;
@@ -603,14 +615,14 @@ body {
   cursor: pointer;
   font-size: 0.9rem;
 }
-.compare-bar .btn-primary:disabled {
+.deck-footer .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.compare-bar .btn-primary:not(:disabled):hover {
+.deck-footer .btn-primary:not(:disabled):hover {
   background: var(--primary-hover);
 }
-.compare-bar .btn-secondary {
+.deck-footer .btn-secondary {
   background: var(--secondary);
   color: #fff;
   border: none;
@@ -619,11 +631,11 @@ body {
   cursor: pointer;
   font-size: 0.9rem;
 }
-.compare-bar .btn-secondary:disabled {
+.deck-footer .btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.compare-bar .btn-secondary:not(:disabled):hover {
+.deck-footer .btn-secondary:not(:disabled):hover {
   background: var(--secondary-hover);
 }
 
