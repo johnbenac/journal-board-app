@@ -363,6 +363,12 @@ body {
   overflow: visible;
 }
 
+/* Ensure radar/spider chart labels remain readable in both themes */
+.radar-container svg text {
+  fill: var(--text-color);
+  font-weight: 600;
+}
+
 /* Error overlay */
 .error-overlay {
   position: fixed;
