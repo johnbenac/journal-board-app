@@ -966,49 +966,53 @@ function showCardModal(card) {
   const imgGroup = document.createElement('div');
   imgGroup.className = 'field-group';
   const imgLabel = document.createElement('label');
-  imgLabel.textContent = 'Image (PNG 750x1050)';
+  imgLabel.textContent = 'Image (PNG – editor enforces 750x1050)';
   const imgInput = document.createElement('input');
   imgInput.type = 'file';
   imgInput.accept = 'image/png';
   imgInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-      const dataUrl = evt.target.result;
-      const tmpImg = new Image();
-      tmpImg.onload = function () {
-        // Validate dimensions
-        if (
-          tmpImg.width !== state.schema.imageSpec.width ||
-          tmpImg.height !== state.schema.imageSpec.height
-        ) {
-          alert(
-            `Invalid image dimensions. Expected ${state.schema.imageSpec.width}x${state.schema.imageSpec.height}.`
-          );
-          return;
-        }
-        // Check for alpha channel transparency on top-left pixel
-        const canvas = document.createElement('canvas');
-        canvas.width = tmpImg.width;
-        canvas.height = tmpImg.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(tmpImg, 0, 0);
-        const pixel = ctx.getImageData(0, 0, 1, 1).data;
-        if (!state.schema.imageSpec.alphaAllowed && pixel[3] !== 255) {
-          alert('Image must not contain transparency');
-          return;
-        }
-        // Use the provided dataUrl directly (already base64 PNG)
+    if (!file || !window.ImageEditor) return;
+    openEditorWithSource(file)
+      .then((dataUrl) => {
         imageData = dataUrl;
-      };
-      tmpImg.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+        imgInput.value = '';
+        updateEditButtonState();
+      })
+      .catch(() => {
+        /* cancelled */
+      });
   });
   imgLabel.appendChild(imgInput);
   imgGroup.appendChild(imgLabel);
+
+  const editImgBtn = document.createElement('button');
+  editImgBtn.type = 'button';
+  editImgBtn.textContent = 'Edit Image';
+  editImgBtn.addEventListener('click', () => {
+    if (!imageData || !window.ImageEditor) return;
+    openEditorWithSource(imageData)
+      .then((dataUrl) => {
+        imageData = dataUrl;
+        updateEditButtonState();
+      })
+      .catch(() => {});
+  });
+  function updateEditButtonState() {
+    editImgBtn.disabled = !imageData;
+  }
+  updateEditButtonState();
+  imgGroup.appendChild(editImgBtn);
   form.appendChild(imgGroup);
+
+  function openEditorWithSource(source) {
+    const target = state.schema.imageSpec;
+    return window.ImageEditor.open({
+      source,
+      target: { width: target.width, height: target.height },
+      background: '#ffffff',
+    });
+  }
 
   // Notes section
   let notes = card ? card.notes.map((n) => ({ ...n })) : [];
