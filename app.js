@@ -752,6 +752,7 @@ function renderBoard(container) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('width', '300');
   svg.setAttribute('height', '300');
+  svg.style.overflow = 'visible';
   radarWrap.appendChild(svg);
   container.appendChild(radarWrap);
   renderBoardRadar(svg);
@@ -1018,6 +1019,7 @@ function showCardModal(card) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('width', '250');
   svg.setAttribute('height', '250');
+  svg.style.overflow = 'visible';
   radarWrap.appendChild(svg);
   form.appendChild(radarWrap);
   // Render radar for editing card data

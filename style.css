@@ -273,6 +273,11 @@ body {
   margin-top: 1rem;
   display: flex;
   justify-content: center;
+  padding: 0 2rem;
+}
+
+.radar-container svg {
+  overflow: visible;
 }
 
 /* Error overlay */
