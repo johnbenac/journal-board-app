@@ -1089,6 +1089,7 @@ function renderBoard(container) {
     const assignmentsForSlot = state.manifest.board.assignments
       .filter((a) => a.slotId === slot.slotId)
       .sort((a, b) => a.rank - b.rank);
+    const assignedCardIds = new Set(assignmentsForSlot.map((a) => a.cardId));
     assignmentsForSlot.forEach((assign) => {
       const li = document.createElement('li');
       const card = state.manifest.deck.find((c) => c.cardId === assign.cardId);
@@ -1113,6 +1114,7 @@ function renderBoard(container) {
     emptyOption.textContent = '-- Assign card --';
     select.appendChild(emptyOption);
     state.manifest.deck.forEach((card) => {
+      if (assignedCardIds.has(card.cardId)) return;
       const option = document.createElement('option');
       option.value = card.cardId;
       option.textContent = card.data.fullName;
@@ -1200,10 +1202,13 @@ function renameSlot(slotId, name) {
  * @param {string} cardId
  */
 function assignCard(slotId, cardId) {
-  // Determine next rank
+  // Determine next rank and prevent duplicate assignments within the slot
   const assignmentsForSlot = state.manifest.board.assignments.filter(
     (a) => a.slotId === slotId
   );
+  if (assignmentsForSlot.some((a) => a.cardId === cardId)) {
+    return;
+  }
   const nextRank = assignmentsForSlot.length ? Math.max(...assignmentsForSlot.map((a) => a.rank)) + 1 : 1;
   state.manifest.board.assignments.push({ slotId, cardId, rank: nextRank });
   saveSession();
