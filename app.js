@@ -1587,6 +1587,9 @@ function renderCardRadar(svg, cardData) {
   const centerX = 125;
   const centerY = 125;
   const radius = 100;
+  const labelColor = getComputedStyle(document.documentElement)
+    .getPropertyValue('--text-color')
+    .trim() || '#000';
   // Clear svg
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   // Draw grid (5 concentric circles)
@@ -1619,6 +1622,7 @@ function renderCardRadar(svg, cardData) {
     text.setAttribute('font-size', '8');
     text.setAttribute('text-anchor', angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start');
     text.setAttribute('dominant-baseline', 'middle');
+    text.setAttribute('fill', labelColor);
     text.textContent = field.label;
     svg.appendChild(text);
   });
@@ -1652,6 +1656,9 @@ function renderBoardRadar(svg) {
   const centerX = 150;
   const centerY = 150;
   const radius = 120;
+  const labelColor = getComputedStyle(document.documentElement)
+    .getPropertyValue('--text-color')
+    .trim() || '#000';
   // Clear svg
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   // Draw grid lines
@@ -1684,6 +1691,7 @@ function renderBoardRadar(svg) {
     text.setAttribute('font-size', '8');
     text.setAttribute('text-anchor', angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start');
     text.setAttribute('dominant-baseline', 'middle');
+    text.setAttribute('fill', labelColor);
     text.textContent = field.label;
     svg.appendChild(text);
   });
