@@ -371,7 +371,9 @@ const EMBEDDED_DEFAULTS = /** @type {any[]} */ (
 const state = {
   schema: null,
   schemaHash: null,
-  manifest: null
+  manifest: null,
+  compareSelection: new Set(), // UI-only selection (not persisted)
+  compareMax: 5 // limit to keep the overlay readable
 };
 
 const cardTransfer = window.CardTransfer || null; // optional enhancement, not required
@@ -413,9 +415,11 @@ async function init() {
         manifest.schemaHash === state.schemaHash
       ) {
         state.manifest = manifest;
+        state.compareSelection.clear();
       } else {
         // Schema mismatch – don't load, we'll show overlay later
         state.manifest = manifest; // still load to allow import/export
+        state.compareSelection.clear();
       }
     } catch (e) {
       console.error('Failed to parse stored session', e);
@@ -451,6 +455,7 @@ async function init() {
         assignments: []
       }
     };
+    state.compareSelection.clear();
     saveSession();
   }
 
@@ -586,6 +591,20 @@ function renderDeck(container) {
       }
     });
     item.appendChild(delBtn);
+
+    // compare select toggle
+    const compLabel = document.createElement('label');
+    compLabel.className = 'compare-toggle';
+    const compCb = document.createElement('input');
+    compCb.type = 'checkbox';
+    compCb.dataset.card = card.cardId;
+    compCb.checked = state.compareSelection.has(card.cardId);
+    compCb.addEventListener('change', (e) => {
+      toggleCompareSelection(card.cardId, e.target.checked);
+    });
+    compLabel.appendChild(compCb);
+    compLabel.appendChild(document.createTextNode(' Compare'));
+    item.appendChild(compLabel);
     listDiv.appendChild(item);
   });
   container.appendChild(listDiv);
@@ -625,6 +644,7 @@ function renderDeck(container) {
             json.schemaHash === state.schemaHash
           ) {
             state.manifest = json;
+            state.compareSelection.clear();
             saveSession();
             renderApp();
           } else {
@@ -684,6 +704,312 @@ function renderDeck(container) {
     controls.appendChild(importCardLabel);
   }
   container.appendChild(controls);
+
+  // Sticky compare bar inside the Deck panel
+  renderCompareToolbar(container);
+}
+
+/** --------------------------
+ * Compare Mode – helpers & UI
+ * --------------------------*/
+
+/** Normalize a field value for equality checks in compare table. */
+function normalizeForCompare(field, value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (field.type === 'list' || field.type === 'multi-select') {
+    return Array.isArray(value)
+      ? value.map((v) => String(v).trim()).sort().join('|')
+      : String(value).trim();
+  }
+  if (typeof value === 'string') return value.trim();
+  return String(value);
+}
+
+/** Human-readable display for table cells. */
+function valueToDisplay(field, value) {
+  if (value === undefined || value === null || value === '') return '—';
+  if (field.type === 'list' || field.type === 'multi-select') {
+    return Array.isArray(value) ? value.join(', ') : String(value);
+  }
+  return String(value);
+}
+
+/** Toggle a card in compare selection. */
+function toggleCompareSelection(cardId, selected) {
+  if (selected) {
+    if (state.compareSelection.size >= state.compareMax) {
+      alert(`You can compare up to ${state.compareMax} cards at once.`);
+      // Repaint checkbox to uncheck
+      const cb = document.querySelector(`.card-item input[data-card="${cardId}"]`);
+      if (cb) cb.checked = false;
+      return;
+    }
+    state.compareSelection.add(cardId);
+  } else {
+    state.compareSelection.delete(cardId);
+  }
+  // Refresh just the deck UI
+  const deckEl = document.querySelector('.deck');
+  if (deckEl) {
+    renderDeck(deckEl);
+  } else {
+    renderApp(); // fallback
+  }
+}
+
+/** Sticky bar inside the Deck panel. */
+function renderCompareToolbar(deckContainer) {
+  let bar = deckContainer.querySelector('.compare-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'compare-bar';
+    deckContainer.appendChild(bar);
+  }
+  const selectedIds = Array.from(state.compareSelection);
+  const count = selectedIds.length;
+
+  bar.innerHTML = '';
+
+  const left = document.createElement('div');
+  left.className = 'compare-summary';
+  left.textContent = count ? `${count} selected` : 'Select cards to compare';
+
+  const actions = document.createElement('div');
+  actions.className = 'compare-actions';
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'btn-secondary';
+  clearBtn.textContent = 'Clear';
+  clearBtn.disabled = count === 0;
+  clearBtn.addEventListener('click', () => {
+    state.compareSelection.clear();
+    renderDeck(deckContainer);
+  });
+
+  const compareBtn = document.createElement('button');
+  compareBtn.className = 'btn-primary';
+  compareBtn.textContent = count >= 2 ? 'Open Compare' : 'Select 2+ to Compare';
+  compareBtn.disabled = count < 2;
+  compareBtn.addEventListener('click', () => {
+    showCompareModal(selectedIds);
+  });
+
+  actions.appendChild(clearBtn);
+  actions.appendChild(compareBtn);
+  bar.appendChild(left);
+  bar.appendChild(actions);
+}
+
+/** Multi-card radar overlay (one polygon per card). */
+function renderComparisonRadar(svg, cards) {
+  const radarFields = state.schema.fields.filter((f) => f.radar);
+  const numAxes = radarFields.length;
+  const centerX = 180;
+  const centerY = 180;
+  const radius = 140;
+
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  // Grid
+  for (let i = 1; i <= 5; i++) {
+    const r = (radius / 5) * i;
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', centerX);
+    circle.setAttribute('cy', centerY);
+    circle.setAttribute('r', String(r));
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', '#eee');
+    svg.appendChild(circle);
+  }
+
+  // Axes + labels
+  radarFields.forEach((field, idx) => {
+    const angle = (Math.PI * 2 * idx) / numAxes - Math.PI / 2;
+    const x = centerX + Math.cos(angle) * radius;
+    const y = centerY + Math.sin(angle) * radius;
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', centerX);
+    line.setAttribute('y1', centerY);
+    line.setAttribute('x2', String(x));
+    line.setAttribute('y2', String(y));
+    line.setAttribute('stroke', '#ddd');
+    svg.appendChild(line);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', String(centerX + Math.cos(angle) * (radius + 18)));
+    text.setAttribute('y', String(centerY + Math.sin(angle) * (radius + 18)));
+    text.setAttribute('font-size', '9');
+    text.setAttribute(
+      'text-anchor',
+      angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start'
+    );
+    text.setAttribute('dominant-baseline', 'middle');
+    text.textContent = field.label;
+    svg.appendChild(text);
+  });
+
+  const COLORS = ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997'];
+
+  // Polygons
+  cards.forEach((card, idx) => {
+    const pts = radarFields.map((field, i) => {
+      const val = card.data[field.id] != null ? card.data[field.id] : 0;
+      const min = field.min ?? 0;
+      const max = field.max ?? 10;
+      const ratio = max > min ? (val - min) / (max - min) : 0;
+      const r = Math.max(0, Math.min(1, ratio)) * radius;
+      const angle = (Math.PI * 2 * i) / numAxes - Math.PI / 2;
+      const x = centerX + Math.cos(angle) * r;
+      const y = centerY + Math.sin(angle) * r;
+      return `${x},${y}`;
+    });
+
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    const color = COLORS[idx % COLORS.length];
+    polygon.setAttribute('points', pts.join(' '));
+    polygon.setAttribute('fill', color);
+    polygon.setAttribute('opacity', '0.15');
+    polygon.setAttribute('stroke', color);
+    polygon.setAttribute('stroke-width', '2');
+    svg.appendChild(polygon);
+  });
+}
+
+/** Modal: show side-by-side differences & radar overlay. */
+function showCompareModal(cardIds) {
+  const cards = state.manifest.deck.filter((c) => cardIds.includes(c.cardId));
+  if (cards.length < 2) return;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  const title = document.createElement('h2');
+  title.textContent = `Compare (${cards.length}) Cards`;
+  modal.appendChild(title);
+
+  // Legend
+  const legend = document.createElement('div');
+  legend.className = 'compare-legend';
+  const COLORS = ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997'];
+  cards.forEach((card, idx) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    const dot = document.createElement('span');
+    dot.className = 'color-dot';
+    dot.style.background = COLORS[idx % COLORS.length];
+    item.appendChild(dot);
+    const name = document.createElement('span');
+    name.textContent = card.data.fullName;
+    item.appendChild(name);
+    legend.appendChild(item);
+  });
+  modal.appendChild(legend);
+
+  // Radar overlay
+  const radarWrap = document.createElement('div');
+  radarWrap.className = 'radar-container';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '360');
+  svg.setAttribute('height', '360');
+  radarWrap.appendChild(svg);
+  modal.appendChild(radarWrap);
+  renderComparisonRadar(svg, cards);
+
+  // Only differences toggle
+  const diffsLabel = document.createElement('label');
+  diffsLabel.className = 'diffs-toggle';
+  const diffsCb = document.createElement('input');
+  diffsCb.type = 'checkbox';
+  diffsLabel.appendChild(diffsCb);
+  diffsLabel.appendChild(document.createTextNode(' Show only differences'));
+  modal.appendChild(diffsLabel);
+
+  // Table
+  const tableWrap = document.createElement('div');
+  tableWrap.className = 'compare-table-wrap';
+  modal.appendChild(tableWrap);
+
+  function renderTable(onlyDiffs) {
+    tableWrap.innerHTML = '';
+    const table = document.createElement('table');
+    table.className = 'compare-table';
+
+    const thead = document.createElement('thead');
+    const trHead = document.createElement('tr');
+    const thField = document.createElement('th');
+    thField.textContent = 'Field';
+    trHead.appendChild(thField);
+    cards.forEach((c) => {
+      const th = document.createElement('th');
+      th.textContent = c.data.fullName;
+      trHead.appendChild(th);
+    });
+    thead.appendChild(trHead);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    state.schema.fields.forEach((field) => {
+      const values = cards.map((c) => c.data[field.id]);
+      const normalized = values.map((v) => normalizeForCompare(field, v));
+      const allEqual = normalized.every((n) => n === normalized[0]);
+
+      if (onlyDiffs && allEqual) return;
+
+      const tr = document.createElement('tr');
+      if (!allEqual) tr.className = 'row-diff';
+
+      const tdLabel = document.createElement('td');
+      tdLabel.textContent = field.label;
+      tr.appendChild(tdLabel);
+
+      values.forEach((val) => {
+        const td = document.createElement('td');
+        td.textContent = valueToDisplay(field, val);
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+  }
+
+  diffsCb.addEventListener('change', (e) => {
+    renderTable(e.target.checked);
+  });
+  renderTable(false);
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'cancel-btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'delete-btn';
+  clearBtn.textContent = 'Clear Selection';
+  clearBtn.addEventListener('click', () => {
+    state.compareSelection.clear();
+    document.body.removeChild(backdrop);
+    const deck = document.querySelector('.deck');
+    if (deck) renderDeck(deck);
+  });
+
+  actions.appendChild(closeBtn);
+  actions.appendChild(clearBtn);
+  modal.appendChild(actions);
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
 }
 
 /**
@@ -698,6 +1024,7 @@ function deleteCard(cardId) {
     state.manifest.board.assignments = state.manifest.board.assignments.filter(
       (a) => a.cardId !== cardId
     );
+    state.compareSelection.delete(cardId);
     saveSession();
     renderApp();
   }
