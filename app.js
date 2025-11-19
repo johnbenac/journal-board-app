@@ -30,7 +30,24 @@ function validateCardData(schema, data) {
         }
         break;
       case 'list':
-        if (!Array.isArray(value)) errors.push(`${field.label} must be an array`);
+        if (!Array.isArray(value)) {
+          errors.push(`${field.label} must be an array`);
+        } else {
+          const itemType = field.itemType || 'string';
+          for (const entry of value) {
+            if (itemType === 'url') {
+              try {
+                new URL(entry);
+              } catch (e) {
+                errors.push(`${field.label} contains an invalid URL`);
+                break;
+              }
+            } else if (typeof entry !== 'string') {
+              errors.push(`${field.label} entries must be text`);
+              break;
+            }
+          }
+        }
         break;
       case 'text':
         if (typeof value !== 'string') errors.push(`${field.label} must be text`);
@@ -378,6 +395,40 @@ const state = {
 
 const cardTransfer = window.CardTransfer || null; // optional enhancement, not required
 
+function deepClone(obj) {
+  return obj == null ? obj : JSON.parse(JSON.stringify(obj));
+}
+
+function cloneValue(value) {
+  if (Array.isArray(value)) return value.map((v) => cloneValue(v));
+  if (value && typeof value === 'object') return JSON.parse(JSON.stringify(value));
+  return value;
+}
+
+function defaultValueForField(field) {
+  switch (field.type) {
+    case 'number':
+      return null;
+    case 'multi-select':
+    case 'list':
+      return [];
+    case 'enum':
+      return '';
+    default:
+      return '';
+  }
+}
+
+function isValidUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    new URL(value);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
  * @param {string} str
@@ -392,60 +443,171 @@ async function computeHash(str) {
     .join('');
 }
 
+function hashSchema(schema) {
+  return computeHash(JSON.stringify(schema));
+}
+
+function validateSchemaDraft(schema) {
+  const errors = [];
+  if (!schema || !Array.isArray(schema.fields) || schema.fields.length === 0) {
+    errors.push('Schema must define at least one field.');
+    return errors;
+  }
+  const ids = new Set();
+  const idPattern = /^[a-zA-Z0-9_]+$/;
+  schema.fields.forEach((field) => {
+    if (!field.id || !idPattern.test(field.id)) {
+      errors.push(`Field "${field.label || field.id || 'unnamed'}" must have an alphanumeric id.`);
+    } else if (ids.has(field.id)) {
+      errors.push(`Duplicate field id "${field.id}" detected.`);
+    }
+    ids.add(field.id);
+    if (!field.label) errors.push(`Field ${field.id} requires a label.`);
+    if (!field.type) errors.push(`Field ${field.id} requires a type.`);
+    if (field.type === 'number') {
+      if (field.min == null || field.max == null) {
+        errors.push(`Number field ${field.id} must define min and max.`);
+      } else if (field.min > field.max) {
+        errors.push(`Number field ${field.id} has min greater than max.`);
+      }
+    }
+    if (field.type === 'enum' || field.type === 'multi-select') {
+      if (!Array.isArray(field.options) || field.options.length === 0) {
+        errors.push(`Field ${field.id} must define at least one option.`);
+      }
+    }
+    if (field.type === 'list') {
+      const allowed = ['string', 'url'];
+      if (!allowed.includes(field.itemType)) {
+        errors.push(`List field ${field.id} must specify itemType string or url.`);
+      }
+    }
+    if (field.radar && field.type !== 'number') {
+      errors.push(`Only number fields can appear on the radar chart (${field.id}).`);
+    }
+    if (field.radar && !['sum', 'mean', 'max'].includes(field.boardAggregate || '')) {
+      errors.push(`Radar field ${field.id} must specify boardAggregate (sum, mean or max).`);
+    }
+  });
+  const requiredCore = Array.isArray(schema.requiredCoreFields) ? schema.requiredCoreFields : [];
+  requiredCore.forEach((coreId) => {
+    if (!ids.has(coreId)) errors.push(`Required core field ${coreId} is missing.`);
+  });
+  if (schema.defaultSort && schema.defaultSort.field) {
+    if (!ids.has(schema.defaultSort.field)) {
+      errors.push('Default sort field must reference an existing field.');
+    }
+  }
+  return errors;
+}
+
+function indexById(fields) {
+  const map = new Map();
+  fields.forEach((field) => map.set(field.id, field));
+  return map;
+}
+
+function diffSchemas(oldSchema, newSchema) {
+  const oldMap = indexById(oldSchema.fields);
+  const newMap = indexById(newSchema.fields);
+  const plan = {
+    added: [],
+    removed: [],
+    typeChanged: [],
+    itemTypeChanged: [],
+    enumShrunk: [],
+    rangeTightened: []
+  };
+
+  newSchema.fields.forEach((field) => {
+    if (!oldMap.has(field.id)) plan.added.push(field);
+  });
+
+  oldSchema.fields.forEach((field) => {
+    if (!newMap.has(field.id)) plan.removed.push(field);
+  });
+
+  oldSchema.fields.forEach((field) => {
+    const next = newMap.get(field.id);
+    if (!next) return;
+    if (field.type !== next.type) {
+      plan.typeChanged.push({ id: field.id, from: field.type, to: next.type });
+    }
+    if (field.type === 'list' && next.type === 'list' && field.itemType !== next.itemType) {
+      plan.itemTypeChanged.push({ id: field.id, from: field.itemType, to: next.itemType });
+    }
+    if ((field.type === 'enum' || field.type === 'multi-select') && Array.isArray(field.options) && Array.isArray(next.options)) {
+      const removedOptions = field.options.filter((opt) => !next.options.includes(opt));
+      if (removedOptions.length) {
+        plan.enumShrunk.push({ id: field.id, removedOptions });
+      }
+    }
+    if (field.type === 'number' && next.type === 'number') {
+      const tightened = (next.min ?? field.min ?? 0) > (field.min ?? 0) || (next.max ?? field.max ?? 0) < (field.max ?? 0);
+      if (tightened) {
+        plan.rangeTightened.push({
+          id: field.id,
+          old: { min: field.min, max: field.max },
+          next: { min: next.min, max: next.max }
+        });
+      }
+    }
+  });
+  return plan;
+}
+
+function planHasDestructiveChanges(plan) {
+  return (
+    plan.removed.length > 0 ||
+    plan.typeChanged.length > 0 ||
+    plan.enumShrunk.length > 0 ||
+    plan.itemTypeChanged.length > 0
+  );
+}
+
 // No network load: JSON assets are embedded. loadJson remains unused.
 
 /**
  * Initialize the application: load schema, compute hash, load or create a session.
  */
 async function init() {
-  // Use embedded schema
-  const schema = EMBEDDED_SCHEMA;
-  state.schema = schema;
-  const schemaString = JSON.stringify(schema);
-  state.schemaHash = await computeHash(schemaString);
-
-  // Load the manifest from localStorage if present
+  const baselineHash = await hashSchema(EMBEDDED_SCHEMA);
+  let manifest = null;
   const stored = localStorage.getItem('jf_session');
   if (stored) {
     try {
-      const manifest = JSON.parse(stored);
-      // Validate schema ID and hash
-      if (
-        manifest.schemaId === schema.schemaId &&
-        manifest.schemaHash === state.schemaHash
-      ) {
-        state.manifest = manifest;
-        state.compareSelection.clear();
-      } else {
-        // Schema mismatch – don't load, we'll show overlay later
-        state.manifest = manifest; // still load to allow import/export
-        state.compareSelection.clear();
-      }
+      manifest = JSON.parse(stored);
     } catch (e) {
       console.error('Failed to parse stored session', e);
     }
   }
 
-  // If no valid manifest, create a new one using embedded defaults
-  if (!state.manifest || state.manifest.schemaHash !== state.schemaHash) {
-    const defaults = EMBEDDED_DEFAULTS;
-    const deck = defaults.map((card) => {
-      return {
-        cardId: card.cardId || generateId(),
-        image: card.image || '',
-        data: card.data,
-        notes: card.notes || []
-      };
-    });
-    state.manifest = {
-      manifestVersion: '1.0',
-      appVersion: '0.1',
-      schemaId: schema.schemaId,
-      schemaHash: state.schemaHash,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      deck,
-      board: {
+  let needsSave = false;
+
+  if (!manifest) {
+    const schemaCopy = deepClone(EMBEDDED_SCHEMA);
+    manifest = createManifestFromDefaults(schemaCopy, baselineHash);
+    needsSave = true;
+  } else {
+    if (!manifest.schema) {
+      manifest.schema = deepClone(EMBEDDED_SCHEMA);
+      manifest.schemaHash = baselineHash;
+      needsSave = true;
+    }
+    if (!manifest.schemaHash) {
+      manifest.schemaHash = await hashSchema(manifest.schema);
+      needsSave = true;
+    }
+    if (!manifest.schemaId && manifest.schema) {
+      manifest.schemaId = manifest.schema.schemaId;
+      needsSave = true;
+    }
+    if (!manifest.deck) {
+      manifest.deck = [];
+      needsSave = true;
+    }
+    if (!manifest.board) {
+      manifest.board = {
         boardId: 'default',
         slots: [
           { slotId: generateId(), name: 'Director' },
@@ -453,13 +615,20 @@ async function init() {
           { slotId: generateId(), name: 'Treasurer' }
         ],
         assignments: []
-      }
-    };
-    state.compareSelection.clear();
+      };
+      needsSave = true;
+    }
+  }
+
+  state.manifest = manifest;
+  state.schema = manifest.schema;
+  state.schemaHash = manifest.schemaHash;
+  state.compareSelection.clear();
+
+  if (needsSave) {
     saveSession();
   }
 
-  // Render the interface
   renderApp();
 }
 
@@ -467,8 +636,39 @@ async function init() {
  * Persist the current manifest to localStorage.
  */
 function saveSession() {
+  if (!state.manifest) return;
+  state.manifest.schema = state.schema;
+  state.manifest.schemaHash = state.schemaHash;
   state.manifest.updatedAt = new Date().toISOString();
   localStorage.setItem('jf_session', JSON.stringify(state.manifest));
+}
+
+function createManifestFromDefaults(schema, schemaHash) {
+  const deck = EMBEDDED_DEFAULTS.map((card) => ({
+    cardId: card.cardId || generateId(),
+    image: card.image || '',
+    data: deepClone(card.data || {}),
+    notes: Array.isArray(card.notes) ? deepClone(card.notes) : []
+  }));
+  return {
+    manifestVersion: '1.0',
+    appVersion: '0.1',
+    schemaId: schema.schemaId,
+    schemaHash,
+    schema,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    deck,
+    board: {
+      boardId: 'default',
+      slots: [
+        { slotId: generateId(), name: 'Director' },
+        { slotId: generateId(), name: 'Secretary' },
+        { slotId: generateId(), name: 'Treasurer' }
+      ],
+      assignments: []
+    }
+  };
 }
 
 /**
@@ -495,25 +695,10 @@ function generateId() {
  */
 function renderApp() {
   const app = document.getElementById('app');
-  // Check schema mismatch; if mismatched, show overlay
-  if (state.manifest.schemaHash !== state.schemaHash) {
-    app.innerHTML = '';
-    const overlay = document.createElement('div');
-    overlay.className = 'error-overlay';
-    overlay.innerHTML = `<p>Your saved data was created with a different schema.</p><p>Current schema hash: ${state.schemaHash}<br/>Session schema hash: ${state.manifest.schemaHash}</p>`;
-    const btn = document.createElement('button');
-    btn.textContent = 'Reset & Start Fresh';
-    btn.addEventListener('click', () => {
-      localStorage.removeItem('jf_session');
-      location.reload();
-    });
-    overlay.appendChild(btn);
-    document.body.appendChild(overlay);
+  if (!state.manifest || !state.schema) {
+    app.textContent = 'Loading…';
     return;
   }
-  // Clear previous overlay if exists
-  const existingOverlay = document.querySelector('.error-overlay');
-  if (existingOverlay) existingOverlay.remove();
 
   // Main container layout: deck and board
   app.innerHTML = '';
@@ -548,6 +733,14 @@ function renderDeck(container) {
     showCardModal(null);
   });
   container.appendChild(addBtn);
+
+  const schemaBtn = document.createElement('button');
+  schemaBtn.className = 'add-card-btn schema-edit-btn';
+  schemaBtn.textContent = 'Edit Schema';
+  schemaBtn.addEventListener('click', () => {
+    showSchemaEditor();
+  });
+  container.appendChild(schemaBtn);
 
   const listDiv = document.createElement('div');
   listDiv.className = 'card-list';
@@ -639,11 +832,18 @@ function renderDeck(container) {
       reader.onload = function (evt) {
         try {
           const json = JSON.parse(evt.target.result);
+          if (!json.schema || !json.schemaHash) {
+            alert('Imported session is missing schema metadata.');
+            return;
+          }
           if (
             json.schemaId === state.schema.schemaId &&
             json.schemaHash === state.schemaHash
           ) {
             state.manifest = json;
+            state.schema = json.schema;
+            state.manifest.schema = state.schema;
+            state.schemaHash = json.schemaHash;
             state.compareSelection.clear();
             saveSession();
             renderApp();
@@ -708,6 +908,788 @@ function renderDeck(container) {
   // Sticky compare bar inside the Deck panel
   renderCompareToolbar(container);
 }
+
+function showSchemaEditor() {
+  if (!state.schema) return;
+  const draft = deepClone(state.schema);
+  draft.requiredCoreFields = Array.isArray(draft.requiredCoreFields)
+    ? draft.requiredCoreFields
+    : [];
+  if (!draft.defaultSort) {
+    draft.defaultSort = {
+      field: draft.fields[0] ? draft.fields[0].id : '',
+      direction: 'desc'
+    };
+  }
+  const originalIds = new Set(state.schema.fields.map((f) => f.id));
+  const deckSize = state.manifest ? state.manifest.deck.length : 0;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'modal schema-modal';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Edit Schema';
+  modal.appendChild(title);
+
+  const intro = document.createElement('p');
+  intro.textContent = 'Adjust the fields that every card in this session uses.';
+  modal.appendChild(intro);
+
+  const layout = document.createElement('div');
+  layout.className = 'schema-editor-layout';
+  modal.appendChild(layout);
+
+  const fieldsCol = document.createElement('div');
+  fieldsCol.className = 'schema-fields-column';
+  layout.appendChild(fieldsCol);
+
+  const fieldsPane = document.createElement('div');
+  fieldsPane.className = 'schema-field-list';
+  fieldsCol.appendChild(fieldsPane);
+
+  const addFieldRow = document.createElement('div');
+  addFieldRow.className = 'schema-add-field-row';
+  const addFieldBtn = document.createElement('button');
+  addFieldBtn.type = 'button';
+  addFieldBtn.className = 'add-card-btn schema-add-field-btn';
+  addFieldBtn.textContent = 'Add Dimension';
+  addFieldBtn.addEventListener('click', () => {
+    const id = generateFieldId();
+    draft.fields.push({
+      id,
+      label: 'New Dimension',
+      type: 'number',
+      min: 0,
+      max: 10,
+      radar: true,
+      boardAggregate: 'mean'
+    });
+    renderFields();
+    renderMeta();
+  });
+  addFieldRow.appendChild(addFieldBtn);
+  fieldsCol.appendChild(addFieldRow);
+
+  const metaPane = document.createElement('div');
+  metaPane.className = 'schema-meta-panel';
+  layout.appendChild(metaPane);
+
+  function generateFieldId() {
+    let candidate = '';
+    do {
+      candidate = `field_${Math.random().toString(36).slice(2, 8)}`;
+    } while (draft.fields.some((f) => f.id === candidate));
+    return candidate;
+  }
+
+  function renderFields() {
+    fieldsPane.innerHTML = '';
+    draft.fields.forEach((field, index) => {
+      const card = document.createElement('div');
+      card.className = 'schema-field-card';
+
+      const header = document.createElement('div');
+      header.className = 'schema-field-header';
+      header.textContent = `${field.label || 'Untitled'} (${field.id})`;
+      card.appendChild(header);
+
+      const idLabel = document.createElement('label');
+      idLabel.textContent = 'Field ID';
+      const idInput = document.createElement('input');
+      idInput.type = 'text';
+      idInput.value = field.id;
+      if (originalIds.has(field.id)) {
+        idInput.readOnly = true;
+        idInput.className = 'schema-locked-input';
+        idInput.title = 'IDs for existing fields cannot be changed.';
+      } else {
+        idInput.addEventListener('input', () => {
+          field.id = idInput.value.trim();
+          header.textContent = `${field.label || 'Untitled'} (${field.id})`;
+          renderMeta();
+        });
+      }
+      idLabel.appendChild(idInput);
+      card.appendChild(idLabel);
+
+      const labelLabel = document.createElement('label');
+      labelLabel.textContent = 'Label';
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.value = field.label || '';
+      labelInput.addEventListener('input', () => {
+        field.label = labelInput.value;
+        header.textContent = `${field.label || 'Untitled'} (${field.id})`;
+        renderMeta();
+      });
+      labelLabel.appendChild(labelInput);
+      card.appendChild(labelLabel);
+
+      const typeLabel = document.createElement('label');
+      typeLabel.textContent = 'Type';
+      const typeSelect = document.createElement('select');
+      ['string', 'text', 'number', 'enum', 'multi-select', 'list', 'url'].forEach((type) => {
+        const opt = document.createElement('option');
+        opt.value = type;
+        opt.textContent = type;
+        if (field.type === type) opt.selected = true;
+        typeSelect.appendChild(opt);
+      });
+      typeSelect.addEventListener('change', () => {
+        field.type = typeSelect.value;
+        if (field.type === 'number') {
+          field.min = field.min ?? 0;
+          field.max = field.max ?? 10;
+        }
+        if (field.type === 'enum' || field.type === 'multi-select') {
+          field.options = Array.isArray(field.options) && field.options.length ? field.options : ['Option'];
+        }
+        if (field.type === 'list') {
+          field.itemType = field.itemType || 'string';
+        }
+        if (field.type !== 'number') {
+          field.radar = false;
+          delete field.boardAggregate;
+        }
+        renderFields();
+        renderMeta();
+      });
+      typeLabel.appendChild(typeSelect);
+      card.appendChild(typeLabel);
+
+      if (field.type === 'number') {
+        const minLabel = document.createElement('label');
+        minLabel.textContent = 'Minimum';
+        const minInput = document.createElement('input');
+        minInput.type = 'number';
+        minInput.value = field.min ?? 0;
+        minInput.addEventListener('input', () => {
+          field.min = minInput.value === '' ? null : Number(minInput.value);
+        });
+        minLabel.appendChild(minInput);
+        card.appendChild(minLabel);
+
+        const maxLabel = document.createElement('label');
+        maxLabel.textContent = 'Maximum';
+        const maxInput = document.createElement('input');
+        maxInput.type = 'number';
+        maxInput.value = field.max ?? 10;
+        maxInput.addEventListener('input', () => {
+          field.max = maxInput.value === '' ? null : Number(maxInput.value);
+        });
+        maxLabel.appendChild(maxInput);
+        card.appendChild(maxLabel);
+      }
+
+      if (field.type === 'string') {
+        const maxLenLabel = document.createElement('label');
+        maxLenLabel.textContent = 'Max length (optional)';
+        const maxLenInput = document.createElement('input');
+        maxLenInput.type = 'number';
+        maxLenInput.value = field.maxLength || '';
+        maxLenInput.addEventListener('input', () => {
+          field.maxLength = maxLenInput.value === '' ? undefined : Number(maxLenInput.value);
+        });
+        maxLenLabel.appendChild(maxLenInput);
+        card.appendChild(maxLenLabel);
+      }
+
+      if (field.type === 'enum' || field.type === 'multi-select') {
+        const optionsLabel = document.createElement('label');
+        optionsLabel.textContent = 'Options (one per line)';
+        const optionsArea = document.createElement('textarea');
+        optionsArea.rows = 3;
+        optionsArea.value = Array.isArray(field.options) ? field.options.join('\n') : '';
+        optionsArea.addEventListener('input', () => {
+          field.options = optionsArea.value
+            .split(/\n+/)
+            .map((v) => v.trim())
+            .filter(Boolean);
+        });
+        optionsLabel.appendChild(optionsArea);
+        card.appendChild(optionsLabel);
+      }
+
+      if (field.type === 'list') {
+        const itemLabel = document.createElement('label');
+        itemLabel.textContent = 'List item type';
+        const itemSelect = document.createElement('select');
+        ['string', 'url'].forEach((opt) => {
+          const option = document.createElement('option');
+          option.value = opt;
+          option.textContent = opt;
+          if (field.itemType === opt) option.selected = true;
+          itemSelect.appendChild(option);
+        });
+        itemSelect.addEventListener('change', () => {
+          field.itemType = itemSelect.value;
+        });
+        itemLabel.appendChild(itemSelect);
+        card.appendChild(itemLabel);
+
+        const maxItemsLabel = document.createElement('label');
+        maxItemsLabel.textContent = 'Max items (optional)';
+        const maxItemsInput = document.createElement('input');
+        maxItemsInput.type = 'number';
+        maxItemsInput.value = field.maxItems || '';
+        maxItemsInput.addEventListener('input', () => {
+          field.maxItems = maxItemsInput.value === '' ? undefined : Number(maxItemsInput.value);
+        });
+        maxItemsLabel.appendChild(maxItemsInput);
+        card.appendChild(maxItemsLabel);
+      }
+
+      const flagsRow = document.createElement('div');
+      flagsRow.className = 'schema-flag-row';
+
+      const requiredLabel = document.createElement('label');
+      const requiredCb = document.createElement('input');
+      requiredCb.type = 'checkbox';
+      requiredCb.checked = Boolean(field.required);
+      requiredCb.addEventListener('change', () => {
+        field.required = requiredCb.checked;
+      });
+      requiredLabel.appendChild(requiredCb);
+      requiredLabel.appendChild(document.createTextNode(' Required'));
+      flagsRow.appendChild(requiredLabel);
+
+      const uniqueLabel = document.createElement('label');
+      const uniqueCb = document.createElement('input');
+      uniqueCb.type = 'checkbox';
+      uniqueCb.checked = Boolean(field.unique);
+      uniqueCb.addEventListener('change', () => {
+        field.unique = uniqueCb.checked;
+      });
+      uniqueLabel.appendChild(uniqueCb);
+      uniqueLabel.appendChild(document.createTextNode(' Unique'));
+      flagsRow.appendChild(uniqueLabel);
+
+      const frontLabel = document.createElement('label');
+      const frontCb = document.createElement('input');
+      frontCb.type = 'checkbox';
+      frontCb.checked = Boolean(field.cardFront);
+      frontCb.addEventListener('change', () => {
+        field.cardFront = frontCb.checked;
+      });
+      frontLabel.appendChild(frontCb);
+      frontLabel.appendChild(document.createTextNode(' Show on card front'));
+      flagsRow.appendChild(frontLabel);
+
+      if (field.type === 'number') {
+        const radarLabel = document.createElement('label');
+        const radarCb = document.createElement('input');
+        radarCb.type = 'checkbox';
+        radarCb.checked = Boolean(field.radar);
+        radarCb.addEventListener('change', () => {
+          field.radar = radarCb.checked;
+          if (!field.radar) delete field.boardAggregate;
+          else field.boardAggregate = field.boardAggregate || 'max';
+          renderMeta();
+          renderFields();
+        });
+        radarLabel.appendChild(radarCb);
+        radarLabel.appendChild(document.createTextNode(' Show on radar'));
+        flagsRow.appendChild(radarLabel);
+
+        if (field.radar) {
+          const aggLabel = document.createElement('label');
+          aggLabel.textContent = 'Board aggregate';
+          const aggSelect = document.createElement('select');
+          ['max', 'mean', 'sum'].forEach((opt) => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            if (field.boardAggregate === opt) option.selected = true;
+            aggSelect.appendChild(option);
+          });
+          aggSelect.addEventListener('change', () => {
+            field.boardAggregate = aggSelect.value;
+          });
+          aggLabel.appendChild(aggSelect);
+          card.appendChild(aggLabel);
+        }
+      }
+
+      card.appendChild(flagsRow);
+
+      const controls = document.createElement('div');
+      controls.className = 'schema-field-controls';
+      const upBtn = document.createElement('button');
+      upBtn.type = 'button';
+      upBtn.textContent = 'Move Up';
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener('click', () => {
+        const [item] = draft.fields.splice(index, 1);
+        draft.fields.splice(index - 1, 0, item);
+        renderFields();
+        renderMeta();
+      });
+      controls.appendChild(upBtn);
+
+      const downBtn = document.createElement('button');
+      downBtn.type = 'button';
+      downBtn.textContent = 'Move Down';
+      downBtn.disabled = index === draft.fields.length - 1;
+      downBtn.addEventListener('click', () => {
+        const [item] = draft.fields.splice(index, 1);
+        draft.fields.splice(index + 1, 0, item);
+        renderFields();
+        renderMeta();
+      });
+      controls.appendChild(downBtn);
+
+      const isProtected = draft.requiredCoreFields.includes(field.id);
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'schema-inline-danger';
+      removeBtn.textContent = 'Remove';
+      removeBtn.disabled = isProtected;
+      removeBtn.addEventListener('click', () => {
+        if (isProtected) return;
+        if (confirm('Removing this field will delete its data on every card. Continue?')) {
+          draft.fields.splice(index, 1);
+          renderFields();
+          renderMeta();
+        }
+      });
+      controls.appendChild(removeBtn);
+
+      card.appendChild(controls);
+      fieldsPane.appendChild(card);
+    });
+  }
+
+  function renderMeta() {
+    metaPane.innerHTML = '';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Schema Settings';
+    metaPane.appendChild(heading);
+
+    const sortFieldLabel = document.createElement('label');
+    sortFieldLabel.textContent = 'Default sort field';
+    const sortSelect = document.createElement('select');
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'None';
+    sortSelect.appendChild(blank);
+    draft.fields.forEach((field) => {
+      const opt = document.createElement('option');
+      opt.value = field.id;
+      opt.textContent = field.label || field.id;
+      if (draft.defaultSort && draft.defaultSort.field === field.id) opt.selected = true;
+      sortSelect.appendChild(opt);
+    });
+    sortSelect.addEventListener('change', () => {
+      draft.defaultSort = draft.defaultSort || { direction: 'desc' };
+      draft.defaultSort.field = sortSelect.value;
+    });
+    sortFieldLabel.appendChild(sortSelect);
+    metaPane.appendChild(sortFieldLabel);
+
+    const dirLabel = document.createElement('label');
+    dirLabel.textContent = 'Sort direction';
+    const dirSelect = document.createElement('select');
+    ['asc', 'desc'].forEach((dir) => {
+      const opt = document.createElement('option');
+      opt.value = dir;
+      opt.textContent = dir.toUpperCase();
+      if (draft.defaultSort && draft.defaultSort.direction === dir) opt.selected = true;
+      dirSelect.appendChild(opt);
+    });
+    dirSelect.addEventListener('change', () => {
+      draft.defaultSort = draft.defaultSort || { field: '' };
+      draft.defaultSort.direction = dirSelect.value;
+    });
+    dirLabel.appendChild(dirSelect);
+    metaPane.appendChild(dirLabel);
+
+    const radarHeading = document.createElement('h4');
+    radarHeading.textContent = 'Radar axes';
+    metaPane.appendChild(radarHeading);
+    const radarList = document.createElement('ul');
+    radarList.className = 'schema-radar-list';
+    const radarFields = draft.fields.filter((f) => f.radar);
+    if (!radarFields.length) {
+      const item = document.createElement('li');
+      item.textContent = 'No numeric fields marked for the radar chart.';
+      radarList.appendChild(item);
+    } else {
+      radarFields.forEach((field) => {
+        const item = document.createElement('li');
+        item.textContent = field.label || field.id;
+        radarList.appendChild(item);
+      });
+    }
+    metaPane.appendChild(radarList);
+
+    const deckInfo = document.createElement('p');
+    deckInfo.className = 'schema-meta-note';
+    deckInfo.textContent = `${deckSize} cards will be migrated when changes are committed.`;
+    metaPane.appendChild(deckInfo);
+  }
+
+  renderFields();
+  renderMeta();
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+  actions.appendChild(cancelBtn);
+
+  const reviewBtn = document.createElement('button');
+  reviewBtn.className = 'save-btn';
+  reviewBtn.type = 'button';
+  reviewBtn.textContent = 'Review & Migrate';
+  reviewBtn.addEventListener('click', () => {
+    const draftCopy = deepClone(draft);
+    const errors = validateSchemaDraft(draftCopy);
+    if (errors.length) {
+      alert(errors.join('\n'));
+      return;
+    }
+    const plan = diffSchemas(state.schema, draftCopy);
+    document.body.removeChild(backdrop);
+    showMigrationWizard(draftCopy, plan);
+  });
+  actions.appendChild(reviewBtn);
+
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+}
+
+function showMigrationWizard(nextSchema, plan) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'modal schema-modal';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Review Schema Changes';
+  modal.appendChild(title);
+
+  const countInfo = document.createElement('p');
+  const total = state.manifest ? state.manifest.deck.length : 0;
+  countInfo.textContent = `${total} cards will be updated.`;
+  modal.appendChild(countInfo);
+
+  const summary = document.createElement('div');
+  summary.className = 'schema-plan-summary';
+  summary.innerHTML = renderPlanSummaryHtml(plan);
+  modal.appendChild(summary);
+
+  const destructive = planHasDestructiveChanges(plan);
+  const warning = document.createElement('p');
+  warning.className = destructive ? 'schema-summary-warning' : 'schema-summary-safe';
+  warning.textContent = destructive
+    ? 'This migration removes or overwrites data. Export a backup before proceeding.'
+    : 'No destructive changes detected.';
+  modal.appendChild(warning);
+
+  const defaultControls = new Map();
+  if (plan.added.length) {
+    const defaultsSection = document.createElement('div');
+    defaultsSection.className = 'schema-defaults-section';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Defaults for new fields';
+    defaultsSection.appendChild(heading);
+    plan.added.forEach((field) => {
+      const row = document.createElement('div');
+      row.className = 'schema-default-row';
+      const label = document.createElement('label');
+      label.textContent = `${field.label || field.id}`;
+      const control = buildDefaultControl(field);
+      row.appendChild(label);
+      row.appendChild(control);
+      defaultsSection.appendChild(row);
+      defaultControls.set(field.id, { field, element: control });
+    });
+    modal.appendChild(defaultsSection);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const backupBtn = document.createElement('button');
+  backupBtn.type = 'button';
+  backupBtn.className = 'cancel-btn';
+  backupBtn.textContent = 'Export Backup';
+  backupBtn.addEventListener('click', () => {
+    exportSession();
+  });
+  actions.appendChild(backupBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    document.body.removeChild(backdrop);
+  });
+  actions.appendChild(cancelBtn);
+
+  const commitBtn = document.createElement('button');
+  commitBtn.type = 'button';
+  commitBtn.className = 'save-btn';
+  commitBtn.textContent = 'Commit & Migrate';
+  commitBtn.addEventListener('click', async () => {
+    const defaults = {};
+    defaultControls.forEach(({ field, element }) => {
+      defaults[field.id] = readDefaultValueFromInput(field, element);
+    });
+    if (destructive) {
+      const confirmed = confirm('This will remove fields or rewrite data on all cards. Continue?');
+      if (!confirmed) return;
+    }
+    commitBtn.disabled = true;
+    commitBtn.textContent = 'Migrating…';
+    try {
+      await applyMigration(nextSchema, plan, defaults);
+      document.body.removeChild(backdrop);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to migrate cards. Check the console for details.');
+      commitBtn.disabled = false;
+      commitBtn.textContent = 'Commit & Migrate';
+    }
+  });
+  actions.appendChild(commitBtn);
+
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function buildDefaultControl(field) {
+    if (field.type === 'number') {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.placeholder = 'Leave blank for null';
+      return input;
+    }
+    if (field.type === 'enum') {
+      const select = document.createElement('select');
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = '(blank)';
+      select.appendChild(blank);
+      field.options.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt;
+        option.textContent = opt;
+        select.appendChild(option);
+      });
+      return select;
+    }
+    if (field.type === 'multi-select' || field.type === 'list') {
+      const textarea = document.createElement('textarea');
+      textarea.rows = 2;
+      textarea.placeholder = 'One value per line';
+      return textarea;
+    }
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Leave blank for empty value';
+    return input;
+  }
+}
+
+function readDefaultValueFromInput(field, element) {
+  if (field.type === 'number') {
+    if (element.value === '') return null;
+    const num = Number(element.value);
+    return Number.isNaN(num) ? null : num;
+  }
+  if (field.type === 'enum') {
+    return element.value || '';
+  }
+  if (field.type === 'multi-select' || field.type === 'list') {
+    const values = element.value
+      .split(/\n+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (field.type === 'list' && field.itemType === 'url') {
+      return values.filter((entry) => isValidUrl(entry));
+    }
+    return values;
+  }
+  return element.value || '';
+}
+
+function renderPlanSummaryHtml(plan) {
+  const sections = [];
+  if (plan.added.length) {
+    const list = plan.added
+      .map((field) => `<li><strong>${escapeHtml(field.label || field.id)}</strong> (${escapeHtml(field.id)})</li>`)
+      .join('');
+    sections.push(`<section><h3>Added fields</h3><ul class="schema-change-list">${list}</ul></section>`);
+  }
+  if (plan.removed.length) {
+    const list = plan.removed
+      .map((field) => `<li>${escapeHtml(field.label || field.id)}</li>`)
+      .join('');
+    sections.push(`<section><h3 class="schema-summary-warning">Removed fields</h3><ul class="schema-change-list">${list}</ul></section>`);
+  }
+  if (plan.typeChanged.length) {
+    const list = plan.typeChanged
+      .map((entry) => `<li>${escapeHtml(entry.id)}: ${escapeHtml(entry.from)} → ${escapeHtml(entry.to)}</li>`)
+      .join('');
+    sections.push(`<section><h3>Type changes</h3><ul class="schema-change-list">${list}</ul></section>`);
+  }
+  if (plan.itemTypeChanged.length) {
+    const list = plan.itemTypeChanged
+      .map((entry) => `<li>${escapeHtml(entry.id)}: ${escapeHtml(entry.from)} → ${escapeHtml(entry.to)}</li>`)
+      .join('');
+    sections.push(`<section><h3>List item updates</h3><ul class="schema-change-list">${list}</ul></section>`);
+  }
+  if (plan.enumShrunk.length) {
+    const list = plan.enumShrunk
+      .map((entry) => `<li>${escapeHtml(entry.id)} removing ${escapeHtml(entry.removedOptions.join(', '))}</li>`)
+      .join('');
+    sections.push(`<section><h3>Option removals</h3><ul class="schema-change-list">${list}</ul></section>`);
+  }
+  if (plan.rangeTightened.length) {
+    const list = plan.rangeTightened
+      .map((entry) => {
+        const oldMin = entry.old.min ?? '—';
+        const oldMax = entry.old.max ?? '—';
+        const newMin = entry.next.min ?? '—';
+        const newMax = entry.next.max ?? '—';
+        return `<li>${escapeHtml(entry.id)}: ${escapeHtml(`${oldMin}-${oldMax}`)} → ${escapeHtml(`${newMin}-${newMax}`)}</li>`;
+      })
+      .join('');
+    sections.push(`<section><h3>Range changes</h3><ul class="schema-change-list">${list}</ul></section>`);
+  }
+  if (!sections.length) {
+    return '<p>No structural changes detected. Label or display tweaks will be saved immediately.</p>';
+  }
+  return sections.join('');
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function applyMigration(nextSchema, plan, defaults = {}) {
+  const deck = state.manifest ? state.manifest.deck : [];
+  const nextFieldMap = indexById(nextSchema.fields);
+  deck.forEach((card) => {
+    card.data = card.data || {};
+  });
+
+  plan.added.forEach((field) => {
+    deck.forEach((card) => {
+      if (card.data[field.id] === undefined) {
+        const preset = defaults[field.id];
+        const value = preset !== undefined ? preset : defaultValueForField(field);
+        card.data[field.id] = cloneValue(value);
+      }
+    });
+  });
+
+  plan.removed.forEach((field) => {
+    deck.forEach((card) => {
+      if (card.data) delete card.data[field.id];
+    });
+  });
+
+  plan.typeChanged.forEach(({ id }) => {
+    const field = nextFieldMap.get(id);
+    deck.forEach((card) => {
+      card.data[id] = convertOrReset(field, card.data[id]);
+    });
+  });
+
+  plan.itemTypeChanged.forEach(({ id }) => {
+    const field = nextFieldMap.get(id);
+    deck.forEach((card) => {
+      card.data[id] = convertOrReset(field, card.data[id]);
+    });
+  });
+
+  plan.enumShrunk.forEach(({ id }) => {
+    const field = nextFieldMap.get(id);
+    deck.forEach((card) => {
+      card.data[id] = convertOrReset(field, card.data[id]);
+    });
+  });
+
+  plan.rangeTightened.forEach(({ id }) => {
+    const field = nextFieldMap.get(id);
+    deck.forEach((card) => {
+      card.data[id] = clampIfNeeded(field, card.data[id]);
+    });
+  });
+
+  const nextSchemaCopy = deepClone(nextSchema);
+  state.manifest.schema = nextSchemaCopy;
+  state.schema = nextSchemaCopy;
+  state.schemaHash = await hashSchema(nextSchemaCopy);
+  state.manifest.schemaHash = state.schemaHash;
+  saveSession();
+  renderApp();
+}
+
+function convertOrReset(field, value) {
+  if (value === undefined || value === null || value === '') {
+    return cloneValue(defaultValueForField(field));
+  }
+  if (field.type === 'number') {
+    const num = typeof value === 'number' ? value : Number(value);
+    if (Number.isNaN(num)) return null;
+    return clampIfNeeded(field, num);
+  }
+  if (field.type === 'enum') {
+    return field.options.includes(value) ? value : '';
+  }
+  if (field.type === 'multi-select') {
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry) => field.options.includes(entry));
+  }
+  if (field.type === 'list') {
+    const list = Array.isArray(value)
+      ? value
+      : typeof value === 'string'
+      ? value.split(/\n+/)
+      : [];
+    return list
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter((entry) => {
+        if (!entry) return false;
+        if (field.itemType === 'url') return isValidUrl(entry);
+        return true;
+      });
+  }
+  if (field.type === 'url') {
+    return isValidUrl(value) ? value : '';
+  }
+  if (typeof value !== 'string') {
+    return String(value);
+  }
+  return value;
+}
+
+function clampIfNeeded(field, value) {
+  if (value === undefined || value === null || value === '') return null;
+  const min = field.min ?? 0;
+  const max = field.max ?? 10;
+  const num = typeof value === 'number' ? value : Number(value);
+  if (Number.isNaN(num)) return null;
+  return Math.min(max, Math.max(min, num));
+}
+
 
 /** --------------------------
  * Compare Mode – helpers & UI

@@ -44,7 +44,24 @@ function validateCardData(schema, data) {
         }
         break;
       case 'list':
-        if (!Array.isArray(value)) errors.push(`${field.label} must be an array`);
+        if (!Array.isArray(value)) {
+          errors.push(`${field.label} must be an array`);
+        } else {
+          const itemType = field.itemType || 'string';
+          for (const entry of value) {
+            if (itemType === 'url') {
+              try {
+                new URL(entry);
+              } catch (e) {
+                errors.push(`${field.label} contains an invalid URL`);
+                break;
+              }
+            } else if (typeof entry !== 'string') {
+              errors.push(`${field.label} entries must be text`);
+              break;
+            }
+          }
+        }
         break;
       case 'text':
         if (typeof value !== 'string') errors.push(`${field.label} must be text`);
