@@ -1,7 +1,7 @@
 .ie-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--color-overlay-backdrop, rgba(0, 0, 0, 0.55));
   display: grid;
   place-items: center;
   z-index: 3000;
@@ -9,7 +9,7 @@
 }
 
 .ie-dialog {
-  background: #fff;
+  background: var(--color-modal-bg, #fff);
   width: min(960px, 95vw);
   max-height: 95vh;
   padding: 1rem;
@@ -17,7 +17,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: 1rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 20px 60px var(--color-panel-shadow, rgba(0, 0, 0, 0.35));
 }
 
 @media (max-width: 900px) {
@@ -29,7 +29,7 @@
 }
 
 .ie-stage {
-  background: #0f0f0f;
+  background: var(--color-stage-bg, #0f0f0f);
   border-radius: 10px;
   padding: 1rem;
   display: flex;
@@ -42,7 +42,7 @@
   height: auto;
   max-height: 75vh;
   border-radius: 8px;
-  background: #000;
+  background: var(--color-stage-border, #000);
 }
 
 .ie-controls {
@@ -52,7 +52,7 @@
 }
 
 .ie-controls fieldset {
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border-strong, #ddd);
   border-radius: 8px;
   padding: 0.75rem;
 }
@@ -76,22 +76,23 @@
 .ie-controls button {
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
-  border: 1px solid #999;
-  background: #fff;
+  border: 1px solid var(--color-button-border, #999);
+  background: var(--color-button-bg, #fff);
+  color: var(--color-button-text, #1f1f1f);
   cursor: pointer;
   font-size: 0.9rem;
 }
 
 .ie-controls button.primary {
-  background: #222;
-  color: #fff;
-  border-color: #222;
+  background: var(--color-primary, #222);
+  color: var(--color-on-accent, #fff);
+  border-color: var(--color-primary, #222);
 }
 
 .ie-controls button.danger {
-  background: #fff0f0;
-  border-color: #d33;
-  color: #a00;
+  background: var(--color-danger-soft, rgba(220, 53, 69, 0.1));
+  border-color: var(--color-danger, #d33);
+  color: var(--color-danger, #d33);
 }
 
 .ie-controls button:disabled {
@@ -101,5 +102,5 @@
 
 .ie-grid-preview {
   font-size: 0.8rem;
-  color: #555;
+  color: var(--color-text-muted, #555);
 }
