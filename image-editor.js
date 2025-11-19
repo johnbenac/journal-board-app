@@ -40,7 +40,23 @@
     }
     return ensureBlob(source)
       .then(function (blob) {
-        return createImageBitmap(blob);
+        function decodeWithOrientation() {
+          try {
+            return createImageBitmap(blob, { imageOrientation: 'from-image' });
+          } catch (err) {
+            return Promise.reject(err);
+          }
+        }
+        function decodeWithoutOrientation() {
+          try {
+            return createImageBitmap(blob);
+          } catch (err) {
+            return Promise.reject(err);
+          }
+        }
+        return decodeWithOrientation().catch(function () {
+          return decodeWithoutOrientation();
+        });
       })
       .then(function (bitmap) {
         return {

@@ -966,10 +966,10 @@ function showCardModal(card) {
   const imgGroup = document.createElement('div');
   imgGroup.className = 'field-group';
   const imgLabel = document.createElement('label');
-  imgLabel.textContent = 'Image (PNG 750x1050)';
+  imgLabel.textContent = 'Image (PNG/JPEG/WEBP 750x1050)';
   const imgInput = document.createElement('input');
   imgInput.type = 'file';
-  imgInput.accept = 'image/png';
+  imgInput.accept = 'image/*';
   const imgPreview = document.createElement('img');
   imgPreview.alt = 'Current card image preview';
   imgPreview.style.display = 'none';
