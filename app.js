@@ -98,7 +98,10 @@ const EMBEDDED_SCHEMA = /** @type {any} */ (
           "Academia",
           "Policy",
           "Fundraising",
-          "Operations"
+          "Operations",
+          "Public Trust",
+          "Security",
+          "International"
         ],
         "cardFront": true
       },
@@ -1087,12 +1090,24 @@ function showCardModal(card) {
   function handleSave() {
     const errs = validateCardData(state.schema, cardData);
     if (errs.length) {
+      console.group('Card save blocked');
+      console.error('Validation errors prevented saving card.');
+      console.error('Errors:', errs);
+      console.debug('Card data snapshot:', JSON.parse(JSON.stringify(cardData)));
+      console.groupEnd();
       alert(errs.join('\n'));
       return;
     }
     if (isNew) {
       // ensure unique full name
       if (state.manifest.deck.some((c) => c.data.fullName === cardData.fullName)) {
+        console.group('Card save blocked');
+        console.error('Duplicate full name detected while creating card.', cardData.fullName);
+        console.debug(
+          'Conflicting cards:',
+          state.manifest.deck.filter((c) => c.data.fullName === cardData.fullName)
+        );
+        console.groupEnd();
         alert('A card with that name already exists.');
         return;
       }
