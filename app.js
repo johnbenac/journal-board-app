@@ -374,6 +374,11 @@ const state = {
   manifest: null
 };
 
+const CARD_TRANSFER = typeof window !== 'undefined' ? window.CardTransfer : null;
+if (!CARD_TRANSFER) {
+  throw new Error('Card transfer helpers failed to load');
+}
+
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
  * @param {string} str
@@ -477,6 +482,29 @@ function generateId() {
   return [...bytes].map(toHex).join('');
 }
 
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+function slugifyForFile(text, fallback) {
+  if (!text) return fallback;
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || fallback;
+}
+
 /**
  * Validate card data against the schema. Returns an array of error messages.
  * @param {object} data
@@ -568,6 +596,13 @@ function renderDeck(container) {
       showCardModal(card);
     });
     item.appendChild(editBtn);
+    const exportCardBtn = document.createElement('button');
+    exportCardBtn.textContent = 'Export';
+    exportCardBtn.style.background = '#6c757d';
+    exportCardBtn.addEventListener('click', () => {
+      exportCard(card);
+    });
+    item.appendChild(exportCardBtn);
     // delete button
     const delBtn = document.createElement('button');
     delBtn.textContent = 'Delete';
@@ -631,6 +666,26 @@ function renderDeck(container) {
   });
   importLabel.appendChild(importInput);
   controls.appendChild(importLabel);
+
+  const importCardLabel = document.createElement('label');
+  importCardLabel.style.display = 'inline-block';
+  importCardLabel.style.marginLeft = '0.5rem';
+  importCardLabel.className = 'add-card-btn';
+  importCardLabel.style.background = '#6f42c1';
+  importCardLabel.textContent = 'Import Card';
+  const importCardInput = document.createElement('input');
+  importCardInput.type = 'file';
+  importCardInput.accept = '.json,.jfcard';
+  importCardInput.style.display = 'none';
+  importCardInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      importCardFile(file);
+      e.target.value = '';
+    }
+  });
+  importCardLabel.appendChild(importCardInput);
+  controls.appendChild(importCardLabel);
   container.appendChild(controls);
 }
 
@@ -1304,22 +1359,54 @@ function renderBoardRadar(svg) {
   svg.appendChild(polygon);
 }
 
+function importCardFile(file) {
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const payload = JSON.parse(evt.target.result);
+      const card = addImportedCardToDeck(payload);
+      alert(`Imported card "${card.data.fullName || card.cardId}"`);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to import card');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function addImportedCardToDeck(payload) {
+  const existingIds = new Set(state.manifest.deck.map((c) => c.cardId));
+  const normalized = CARD_TRANSFER.normalizeImportedCardPackage(payload, {
+    schemaId: state.schema.schemaId,
+    schemaHash: state.schemaHash,
+    existingCardIds: existingIds,
+    generateId
+  });
+  const validationErrors = validateCardData(state.schema, normalized.data);
+  if (validationErrors.length) {
+    throw new Error(`Imported card failed validation: ${validationErrors.join(', ')}`);
+  }
+  state.manifest.deck.push(normalized);
+  saveSession();
+  renderApp();
+  return normalized;
+}
+
+function exportCard(card) {
+  const payload = CARD_TRANSFER.createCardExportPayload(
+    state.manifest.schemaId,
+    state.manifest.schemaHash,
+    card
+  );
+  const filename = `${slugifyForFile(card.data.fullName, card.cardId)}.jfcard`;
+  downloadJson(payload, filename);
+}
+
 /**
  * Export the current session manifest as a JSON file.
  */
 function exportSession() {
-  const dataStr = JSON.stringify(state.manifest, null, 2);
-  const blob = new Blob([dataStr], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'journal_session.jfpack';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 0);
+  downloadJson(state.manifest, 'journal_session.jfpack');
 }
 
 // Kick off initialization on page load
