@@ -374,6 +374,13 @@ const state = {
   manifest: null
 };
 
+const CARD_TRANSPORT =
+  typeof window !== 'undefined' && window.CardTransport ? window.CardTransport : null;
+
+if (!CARD_TRANSPORT) {
+  throw new Error('Card transport helpers failed to load');
+}
+
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
  * @param {string} str
@@ -578,6 +585,13 @@ function renderDeck(container) {
       }
     });
     item.appendChild(delBtn);
+    const exportCardBtn = document.createElement('button');
+    exportCardBtn.textContent = 'Export';
+    exportCardBtn.style.background = '#6c757d';
+    exportCardBtn.addEventListener('click', () => {
+      exportCard(card.cardId);
+    });
+    item.appendChild(exportCardBtn);
     listDiv.appendChild(item);
   });
   container.appendChild(listDiv);
@@ -628,9 +642,30 @@ function renderDeck(container) {
       };
       reader.readAsText(file);
     }
+    e.target.value = '';
   });
   importLabel.appendChild(importInput);
   controls.appendChild(importLabel);
+
+  const importCardLabel = document.createElement('label');
+  importCardLabel.style.display = 'inline-block';
+  importCardLabel.style.marginLeft = '0.5rem';
+  importCardLabel.className = 'add-card-btn';
+  importCardLabel.style.background = '#6610f2';
+  importCardLabel.textContent = 'Import Card';
+  const importCardInput = document.createElement('input');
+  importCardInput.type = 'file';
+  importCardInput.accept = '.json,.jfpack,.jfcard';
+  importCardInput.style.display = 'none';
+  importCardInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      importCardFile(file);
+    }
+    e.target.value = '';
+  });
+  importCardLabel.appendChild(importCardInput);
+  controls.appendChild(importCardLabel);
   container.appendChild(controls);
 }
 
@@ -1320,6 +1355,79 @@ function exportSession() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, 0);
+}
+
+function exportCard(cardId) {
+  const card = state.manifest.deck.find((c) => c.cardId === cardId);
+  if (!card) return;
+  try {
+    const bundle = CARD_TRANSPORT.createCardExportBundle(
+      state.schema.schemaId,
+      state.schemaHash,
+      card
+    );
+    const dataStr = JSON.stringify(bundle, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const name =
+      CARD_TRANSPORT.slugifyFileName(card.data.fullName || card.cardId) || 'card';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.jfcard`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  } catch (err) {
+    alert('Unable to export card.');
+    console.error(err);
+  }
+}
+
+function importCardFile(file) {
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const json = JSON.parse(evt.target.result);
+      importCardPayload(json);
+    } catch (err) {
+      alert('Failed to import card: invalid file.');
+    }
+  };
+  reader.onerror = function () {
+    alert('Failed to read file.');
+  };
+  reader.readAsText(file);
+}
+
+function importCardPayload(payload) {
+  const result = CARD_TRANSPORT.prepareImportedCard(payload, {
+    schemaId: state.schema.schemaId,
+    schemaHash: state.schemaHash,
+    idGenerator: () => generateId(),
+    dataValidator: (data) => validateCardData(state.schema, data)
+  });
+  if (result.errors.length) {
+    alert(`Failed to import card:\n${result.errors.join('\n')}`);
+    return;
+  }
+  const card = result.card;
+  const duplicate = state.manifest.deck.find(
+    (existing) => existing.data.fullName === card.data.fullName
+  );
+  if (duplicate) {
+    const proceed = confirm(
+      'A card with the same name already exists. Import another copy?'
+    );
+    if (!proceed) {
+      return;
+    }
+  }
+  state.manifest.deck.push(card);
+  saveSession();
+  renderApp();
 }
 
 // Kick off initialization on page load
