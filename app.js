@@ -374,6 +374,13 @@ const state = {
   manifest: null
 };
 
+function getCardTransferApi() {
+  if (typeof CardTransfer === 'undefined') {
+    throw new Error('Card transfer helpers not loaded');
+  }
+  return CardTransfer;
+}
+
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
  * @param {string} str
@@ -568,6 +575,14 @@ function renderDeck(container) {
       showCardModal(card);
     });
     item.appendChild(editBtn);
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export';
+    exportBtn.style.background = '#ffc107';
+    exportBtn.style.color = '#333';
+    exportBtn.addEventListener('click', () => {
+      exportCard(card);
+    });
+    item.appendChild(exportBtn);
     // delete button
     const delBtn = document.createElement('button');
     delBtn.textContent = 'Delete';
@@ -625,12 +640,50 @@ function renderDeck(container) {
         } catch (err) {
           alert('Failed to import: invalid file');
         }
+        importInput.value = '';
       };
       reader.readAsText(file);
     }
   });
   importLabel.appendChild(importInput);
   controls.appendChild(importLabel);
+  const cardImportLabel = document.createElement('label');
+  cardImportLabel.style.display = 'inline-block';
+  cardImportLabel.style.marginLeft = '0.5rem';
+  cardImportLabel.className = 'add-card-btn';
+  cardImportLabel.style.background = '#6610f2';
+  cardImportLabel.textContent = 'Import Card';
+  const cardImportInput = document.createElement('input');
+  cardImportInput.type = 'file';
+  cardImportInput.accept = '.json,.jcard,.jfcard';
+  cardImportInput.style.display = 'none';
+  cardImportInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+      try {
+        const payload = JSON.parse(evt.target.result);
+        const api = getCardTransferApi();
+        const newCard = api.prepareImportedCard(payload, {
+          schemaId: state.schema.schemaId,
+          schemaHash: state.schemaHash,
+          existingCardIds: state.manifest.deck.map((c) => c.cardId),
+          generateId
+        });
+        state.manifest.deck.push(newCard);
+        saveSession();
+        renderApp();
+      } catch (err) {
+        alert(err.message || 'Failed to import card.');
+      } finally {
+        cardImportInput.value = '';
+      }
+    };
+    reader.readAsText(file);
+  });
+  cardImportLabel.appendChild(cardImportInput);
+  controls.appendChild(cardImportLabel);
   container.appendChild(controls);
 }
 
@@ -1307,19 +1360,43 @@ function renderBoardRadar(svg) {
 /**
  * Export the current session manifest as a JSON file.
  */
-function exportSession() {
-  const dataStr = JSON.stringify(state.manifest, null, 2);
+function downloadJson(obj, filename) {
+  const dataStr = JSON.stringify(obj, null, 2);
   const blob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'journal_session.jfpack';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, 0);
+}
+
+function sanitizeFileName(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'card';
+}
+
+function exportCard(card) {
+  const api = getCardTransferApi();
+  const payload = api.serializeCardExport(card, {
+    schemaId: state.schema.schemaId,
+    schemaHash: state.schemaHash
+  });
+  const baseName = card && card.data && card.data.fullName ? card.data.fullName : card.cardId;
+  const fileName = `${sanitizeFileName(baseName)}.jcard`;
+  downloadJson(payload, fileName);
+}
+
+function exportSession() {
+  downloadJson(state.manifest, 'journal_session.jfpack');
 }
 
 // Kick off initialization on page load
