@@ -195,6 +195,16 @@ const EMBEDDED_SCHEMA = /** @type {any} */ (
         "boardAggregate": "max"
       },
       {
+        "id": "crmContactId",
+        "label": "CRM Contact ID",
+        "type": "string"
+      },
+      {
+        "id": "crmContactUrl",
+        "label": "CRM Link",
+        "type": "url"
+      },
+      {
         "id": "signaturePowers",
         "label": "Signature Powers",
         "type": "list",
@@ -384,13 +394,30 @@ const EMBEDDED_DEFAULTS = /** @type {any[]} */ (
  * loading. Exporting and importing sessions is supported via JSON files.
  */
 
+// --- ESPoCRM integration settings (global, not in cards) ---
+const INTEGRATIONS_KEY = 'jf_integrations';
+const defaultIntegrations = { espocrm: { baseUrl: '', apiKey: '' } };
+
+function loadIntegrations() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(INTEGRATIONS_KEY) || '{}');
+    return { espocrm: Object.assign({}, defaultIntegrations.espocrm, saved.espocrm || {}) };
+  } catch {
+    return defaultIntegrations;
+  }
+}
+function saveIntegrations(integrations) {
+  localStorage.setItem(INTEGRATIONS_KEY, JSON.stringify(integrations));
+}
+
 // Global state for the application
 const state = {
   schema: null,
   schemaHash: null,
   manifest: null,
   compareSelection: new Set(), // UI-only selection (not persisted)
-  compareMax: 5 // limit to keep the overlay readable
+  compareMax: 5, // limit to keep the overlay readable
+  integrations: loadIntegrations()
 };
 
 const cardTransfer = window.CardTransfer || null; // optional enhancement, not required
@@ -427,6 +454,138 @@ function isValidUrl(value) {
   } catch (err) {
     return false;
   }
+}
+
+function espocrmHeaders() {
+  const key = state.integrations?.espocrm?.apiKey || '';
+  const h = { Accept: 'application/json' };
+  if (key) h['X-Api-Key'] = key;
+  return h;
+}
+function espocrmBase() {
+  const b = state.integrations?.espocrm?.baseUrl || '';
+  if (!b) throw new Error('EspoCRM base URL not set.');
+  return b.replace(/\/+$/, '');
+}
+
+async function espofetch(pathAndQuery) {
+  const url = `${espocrmBase()}/api/v1/${pathAndQuery.replace(/^\/+/, '')}`;
+  const res = await fetch(url, { headers: espocrmHeaders() });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`EspoCRM ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json();
+}
+
+async function searchContactsByName(name, limit = 10) {
+  const params = new URLSearchParams();
+  params.set('select', 'id,name,emailAddress');
+  params.set('where[0][type]', 'like');
+  params.set('where[0][attribute]', 'name');
+  params.set('where[0][value]', `%${name}%`);
+  params.set('maxSize', String(limit));
+  return espofetch(`Contact?${params.toString()}`).then((j) => j.list || []);
+}
+
+async function fetchContactActivity(contactId, max = 50) {
+  const listify = (j) => (Array.isArray(j) ? j : j?.list || []);
+  const streamP = espofetch(`Contact/${contactId}/stream?maxSize=${max}&offset=0`).catch(() => ({ list: [] }));
+  const callsP = espofetch(`Contact/${contactId}/calls?orderBy=dateStart&order=desc&maxSize=${max}`).catch(() => ({ list: [] }));
+  const meetsP = espofetch(`Contact/${contactId}/meetings?orderBy=dateStart&order=desc&maxSize=${max}`).catch(() => ({ list: [] }));
+  const tasksP = espofetch(`Contact/${contactId}/tasks?orderBy=dateDue&order=desc&maxSize=${max}`).catch(() => ({ list: [] }));
+  const emailsP = espofetch(`Contact/${contactId}/emails?orderBy=dateSent&order=desc&maxSize=${max}`).catch(() => ({ list: [] }));
+
+  const [stream, calls, meetings, tasks, emails] = await Promise.all([streamP, callsP, meetsP, tasksP, emailsP]);
+
+  const items = [];
+
+  listify(stream).forEach((n) =>
+    items.push({
+      kind: 'Stream',
+      when: n.createdAt || n.dateCreated || null,
+      title: n.post || n.name || '(stream)',
+      raw: n
+    })
+  );
+  listify(calls).forEach((r) =>
+    items.push({
+      kind: 'Call',
+      when: r.dateStart || r.createdAt || null,
+      title: r.name || '(call)',
+      raw: r
+    })
+  );
+  listify(meetings).forEach((r) =>
+    items.push({
+      kind: 'Meeting',
+      when: r.dateStart || r.createdAt || null,
+      title: r.name || '(meeting)',
+      raw: r
+    })
+  );
+  listify(tasks).forEach((r) =>
+    items.push({
+      kind: 'Task',
+      when: r.dateDue || r.createdAt || null,
+      title: r.name || '(task)',
+      raw: r
+    })
+  );
+  listify(emails).forEach((r) =>
+    items.push({
+      kind: 'Email',
+      when: r.dateSent || r.createdAt || null,
+      title: r.name || r.subject || '(email)',
+      raw: r
+    })
+  );
+
+  items.sort((a, b) => (b.when || '').localeCompare(a.when || ''));
+  return items.slice(0, max);
+}
+
+function renderActivityList(container, items, crmRecordUrl) {
+  container.innerHTML = '';
+  const top = document.createElement('div');
+  top.style.display = 'flex';
+  top.style.justifyContent = 'space-between';
+  top.style.alignItems = 'center';
+
+  const h = document.createElement('strong');
+  h.textContent = 'Activity (EspoCRM)';
+  top.appendChild(h);
+
+  if (crmRecordUrl) {
+    const a = document.createElement('a');
+    a.href = crmRecordUrl;
+    a.textContent = 'Open in CRM ↗';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.fontSize = '0.9rem';
+    top.appendChild(a);
+  }
+  container.appendChild(top);
+
+  if (!items.length) {
+    const p = document.createElement('p');
+    p.textContent = 'No recent activity.';
+    container.appendChild(p);
+    return;
+  }
+
+  const ul = document.createElement('ul');
+  ul.style.listStyle = 'none';
+  ul.style.paddingLeft = '0';
+  ul.style.margin = '0.5rem 0 0';
+  items.forEach((it) => {
+    const li = document.createElement('li');
+    li.style.padding = '0.35rem 0';
+    const when = it.when ? new Date(`${it.when}Z`).toLocaleString() : '—';
+    li.textContent = `[${it.kind}] ${it.title} — ${when}`;
+    ul.appendChild(li);
+  });
+  container.appendChild(ul);
 }
 
 /**
@@ -742,6 +901,13 @@ function renderDeck(container) {
   });
   container.appendChild(schemaBtn);
 
+  const crmBtn = document.createElement('button');
+  crmBtn.className = 'add-card-btn';
+  crmBtn.style.background = '#0d6efd';
+  crmBtn.textContent = 'CRM Settings';
+  crmBtn.addEventListener('click', () => showCrmSettingsModal());
+  container.appendChild(crmBtn);
+
   const listDiv = document.createElement('div');
   listDiv.className = 'card-list';
   state.manifest.deck.forEach((card) => {
@@ -803,6 +969,70 @@ function renderDeck(container) {
   container.appendChild(listDiv);
   // Sticky footer inside the Deck panel
   renderDeckFooter(container);
+}
+
+function showCrmSettingsModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  const h = document.createElement('h2');
+  h.textContent = 'EspoCRM Settings';
+  modal.appendChild(h);
+
+  const form = document.createElement('form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    commit();
+  });
+
+  const urlLabel = document.createElement('label');
+  urlLabel.textContent = 'CRM Base URL (e.g., https://crm.example.com)';
+  const urlInput = document.createElement('input');
+  urlInput.type = 'text';
+  urlInput.value = state.integrations.espocrm.baseUrl || '';
+  urlLabel.appendChild(urlInput);
+  form.appendChild(urlLabel);
+
+  const keyLabel = document.createElement('label');
+  keyLabel.textContent = 'API Key (Administration → API Users)';
+  const keyInput = document.createElement('input');
+  keyInput.type = 'text';
+  keyInput.value = state.integrations.espocrm.apiKey || '';
+  keyLabel.appendChild(keyInput);
+  form.appendChild(keyLabel);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => document.body.removeChild(backdrop));
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'save-btn';
+  saveBtn.type = 'submit';
+  saveBtn.textContent = 'Save';
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  form.appendChild(actions);
+
+  modal.appendChild(form);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function commit() {
+    const next = {
+      espocrm: {
+        baseUrl: urlInput.value.trim().replace(/\/+$/, ''),
+        apiKey: keyInput.value.trim()
+      }
+    };
+    state.integrations = next;
+    saveIntegrations(next);
+    document.body.removeChild(backdrop);
+  }
 }
 
 function showSchemaEditor() {
@@ -2366,64 +2596,167 @@ function showCardModal(card) {
   updateImagePreview();
   form.appendChild(imgGroup);
 
-  // Notes section
+  // --- Activity / Notes panel (replaces original Notes section) ---
+  const activityDiv = document.createElement('div');
+  activityDiv.className = 'field-group';
+  const activityLabel = document.createElement('label');
+  activityLabel.textContent = 'Activity';
+  const activityBody = document.createElement('div');
+  activityBody.style.display = 'block';
+  activityLabel.appendChild(activityBody);
+  activityDiv.appendChild(activityLabel);
+  form.appendChild(activityDiv);
+
   let notes = card ? card.notes.map((n) => ({ ...n })) : [];
-  const notesDiv = document.createElement('div');
-  notesDiv.className = 'field-group';
-  const notesLabel = document.createElement('label');
-  notesLabel.textContent = 'Notes';
-  // list of notes
-  const notesList = document.createElement('div');
-  notesList.style.display = 'flex';
-  notesList.style.flexDirection = 'column';
-  notesList.style.gap = '0.25rem';
-  function renderNotes() {
-    notesList.innerHTML = '';
-    notes.forEach((note) => {
-      const noteDiv = document.createElement('div');
-      noteDiv.style.display = 'flex';
-      noteDiv.style.justifyContent = 'space-between';
-      noteDiv.style.alignItems = 'center';
-      const text = document.createElement('span');
-      text.textContent = `${new Date(note.createdAt).toLocaleDateString()}: ${note.text}`;
-      noteDiv.appendChild(text);
-      const del = document.createElement('button');
-      del.textContent = '×';
-      del.style.background = '#dc3545';
-      del.style.color = '#fff';
-      del.style.border = 'none';
-      del.style.borderRadius = '50%';
-      del.style.width = '20px';
-      del.style.height = '20px';
-      del.style.fontSize = '0.8rem';
-      del.addEventListener('click', () => {
-        notes = notes.filter((n) => n.noteId !== note.noteId);
-        renderNotes();
-      });
-      noteDiv.appendChild(del);
-      notesList.appendChild(noteDiv);
-    });
+
+  function toCrmUrl(contactId) {
+    const base = state.integrations?.espocrm?.baseUrl || '';
+    if (!base || !contactId) return '';
+    return `${base}/#Contact/view/${contactId}`;
   }
-  renderNotes();
-  // Add note input
-  const noteInput = document.createElement('input');
-  noteInput.type = 'text';
-  noteInput.placeholder = 'Add note and press Enter';
-  noteInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const text = noteInput.value.trim();
-      if (text) {
-        notes.push({ noteId: generateId(), createdAt: new Date().toISOString(), text });
-        noteInput.value = '';
-        renderNotes();
+
+  const hasSettings = Boolean(state.integrations?.espocrm?.baseUrl && state.integrations?.espocrm?.apiKey);
+  const contactId = cardData.crmContactId || '';
+
+  if (hasSettings && contactId) {
+    (async () => {
+      const loader = document.createElement('p');
+      loader.textContent = 'Loading activity…';
+      activityBody.appendChild(loader);
+      try {
+        const items = await fetchContactActivity(contactId, 50);
+        activityBody.innerHTML = '';
+        renderActivityList(activityBody, items, cardData.crmContactUrl || toCrmUrl(contactId));
+      } catch (err) {
+        activityBody.textContent = `Failed to load CRM activity: ${err.message}`;
       }
+    })();
+  } else {
+    const row = document.createElement('div');
+    row.style.display = 'grid';
+    row.style.gridTemplateColumns = 'minmax(0,1fr) auto';
+    row.style.gap = '0.5rem';
+
+    const lookup = document.createElement('input');
+    lookup.type = 'text';
+    lookup.placeholder = 'Search CRM contacts by name…';
+    lookup.value = cardData.fullName || '';
+    const linkBtn = document.createElement('button');
+    linkBtn.type = 'button';
+    linkBtn.textContent = 'Link to CRM';
+    linkBtn.style.background = '#0d6efd';
+
+    row.appendChild(lookup);
+    row.appendChild(linkBtn);
+    activityBody.appendChild(row);
+
+    const results = document.createElement('div');
+    results.style.marginTop = '0.5rem';
+    activityBody.appendChild(results);
+
+    linkBtn.addEventListener('click', async () => {
+      results.innerHTML = '';
+      if (!state.integrations?.espocrm?.baseUrl || !state.integrations?.espocrm?.apiKey) {
+        results.textContent = 'Set CRM Settings first.';
+        return;
+      }
+      const q = lookup.value.trim();
+      if (!q) {
+        results.textContent = 'Enter a name.';
+        return;
+      }
+      try {
+        const list = await searchContactsByName(q, 10);
+        if (!list.length) {
+          results.textContent = 'No matches.';
+          return;
+        }
+        const ul = document.createElement('ul');
+        ul.style.listStyle = 'none';
+        ul.style.paddingLeft = '0';
+        list.forEach((c) => {
+          const li = document.createElement('li');
+          li.style.padding = '0.3rem 0';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = `Link “${c.name || '(no name)'}” ${c.emailAddress ? ' <' + c.emailAddress + '>' : ''}`;
+          btn.addEventListener('click', () => {
+            cardData.crmContactId = c.id;
+            cardData.crmContactUrl = toCrmUrl(c.id);
+            updateRadarPreview();
+            activityBody.innerHTML = '';
+            const reloader = document.createElement('p');
+            reloader.textContent = 'Linked. Loading activity…';
+            activityBody.appendChild(reloader);
+            fetchContactActivity(c.id, 50)
+              .then((items) => {
+                activityBody.innerHTML = '';
+                renderActivityList(activityBody, items, cardData.crmContactUrl);
+              })
+              .catch((err) => {
+                activityBody.textContent = `Failed to load CRM activity: ${err.message}`;
+              });
+          });
+          li.appendChild(btn);
+          ul.appendChild(li);
+        });
+        results.appendChild(ul);
+      } catch (err) {
+        results.textContent = `Lookup failed: ${err.message}`;
+      }
+    });
+
+    const notesList = document.createElement('div');
+    notesList.style.display = 'flex';
+    notesList.style.flexDirection = 'column';
+    notesList.style.gap = '0.25rem';
+    function renderNotes() {
+      notesList.innerHTML = '';
+      notes.forEach((note) => {
+        const noteDiv = document.createElement('div');
+        noteDiv.style.display = 'flex';
+        noteDiv.style.justifyContent = 'space-between';
+        noteDiv.style.alignItems = 'center';
+        const text = document.createElement('span');
+        text.textContent = `${new Date(note.createdAt).toLocaleDateString()}: ${note.text}`;
+        noteDiv.appendChild(text);
+        const del = document.createElement('button');
+        del.textContent = '×';
+        del.style.background = '#dc3545';
+        del.style.color = '#fff';
+        del.style.border = 'none';
+        del.style.borderRadius = '50%';
+        del.style.width = '20px';
+        del.style.height = '20px';
+        del.style.fontSize = '0.8rem';
+        del.addEventListener('click', () => {
+          notes = notes.filter((n) => n.noteId !== note.noteId);
+          renderNotes();
+        });
+        noteDiv.appendChild(del);
+        notesList.appendChild(noteDiv);
+      });
     }
-  });
-  notesLabel.appendChild(notesList);
-  notesLabel.appendChild(noteInput);
-  notesDiv.appendChild(notesLabel);
-  form.appendChild(notesDiv);
+    renderNotes();
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.placeholder = 'Add note and press Enter';
+    noteInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const text = noteInput.value.trim();
+        if (text) {
+          notes.push({ noteId: generateId(), createdAt: new Date().toISOString(), text });
+          noteInput.value = '';
+          renderNotes();
+        }
+      }
+    });
+    activityBody.appendChild(notesList);
+    activityBody.appendChild(noteInput);
+
+    // persist fallback notes on save
+  }
 
   // Radar chart preview
   const radarWrap = document.createElement('div');

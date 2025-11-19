@@ -123,6 +123,16 @@
       "boardAggregate": "max"
     },
     {
+      "id": "crmContactId",
+      "label": "CRM Contact ID",
+      "type": "string"
+    },
+    {
+      "id": "crmContactUrl",
+      "label": "CRM Link",
+      "type": "url"
+    },
+    {
       "id": "signaturePowers",
       "label": "Signature Powers",
       "type": "list",
