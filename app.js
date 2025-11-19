@@ -962,14 +962,14 @@ function showCardModal(card) {
     form.appendChild(group);
   });
 
-  // Image upload
+  // Image upload + preview + clear
   const imgGroup = document.createElement('div');
   imgGroup.className = 'field-group';
   const imgLabel = document.createElement('label');
-  imgLabel.textContent = 'Image (PNG/JPEG/WEBP 750x1050)';
+  imgLabel.textContent = 'Image (PNG 750x1050)';
   const imgInput = document.createElement('input');
   imgInput.type = 'file';
-  imgInput.accept = 'image/*';
+  imgInput.accept = 'image/png';
   const imgPreview = document.createElement('img');
   imgPreview.alt = 'Current card image preview';
   imgPreview.style.display = 'none';
@@ -983,15 +983,24 @@ function showCardModal(card) {
   editBtn.style.marginTop = '0.5rem';
   editBtn.disabled = !imageData;
 
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Clear Image';
+  clearBtn.style.marginTop = '0.5rem';
+  clearBtn.style.marginLeft = '0.5rem';
+  clearBtn.disabled = !imageData;
+
   function updateImagePreview() {
     if (imageData) {
       imgPreview.src = imageData;
       imgPreview.style.display = 'block';
       editBtn.disabled = false;
+      clearBtn.disabled = false;
     } else {
       imgPreview.removeAttribute('src');
       imgPreview.style.display = 'none';
       editBtn.disabled = true;
+      clearBtn.disabled = true;
     }
   }
 
@@ -1026,8 +1035,15 @@ function showCardModal(card) {
     openImageEditor(imageData);
   });
 
+  clearBtn.addEventListener('click', () => {
+    if (!imageData) return;
+    imageData = '';
+    updateImagePreview();
+  });
+
   imgLabel.appendChild(imgInput);
   imgLabel.appendChild(editBtn);
+  imgLabel.appendChild(clearBtn);
   imgLabel.appendChild(imgPreview);
   imgGroup.appendChild(imgLabel);
   updateImagePreview();
