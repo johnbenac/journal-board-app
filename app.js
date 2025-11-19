@@ -98,7 +98,10 @@ const EMBEDDED_SCHEMA = /** @type {any} */ (
           "Academia",
           "Policy",
           "Fundraising",
-          "Operations"
+          "Operations",
+          "Public Trust",
+          "Security",
+          "International"
         ],
         "cardFront": true
       },
@@ -1087,6 +1090,21 @@ function showCardModal(card) {
   function handleSave() {
     const errs = validateCardData(state.schema, cardData);
     if (errs.length) {
+      const categoriesField = state.schema.fields.find((f) => f.id === 'categories');
+      console.groupCollapsed('Card validation failed');
+      console.error('Errors:', errs);
+      console.error('Card being saved:', {
+        mode: isNew ? 'create' : 'update',
+        cardId: card ? card.cardId : null,
+        fullName: cardData.fullName || '(missing name)'
+      });
+      console.error('Card data snapshot:', JSON.parse(JSON.stringify(cardData)));
+      if (categoriesField) {
+        console.error('Category selections:', cardData.categories || []);
+        console.error('Allowed category options:', categoriesField.options);
+      }
+      console.error('Schema hash:', state.schemaHash);
+      console.groupEnd();
       alert(errs.join('\n'));
       return;
     }
