@@ -750,8 +750,9 @@ function renderBoard(container) {
   const radarWrap = document.createElement('div');
   radarWrap.className = 'radar-container';
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '300');
-  svg.setAttribute('height', '300');
+  svg.setAttribute('width', '360');
+  svg.setAttribute('height', '360');
+  svg.style.overflow = 'visible';
   radarWrap.appendChild(svg);
   container.appendChild(radarWrap);
   renderBoardRadar(svg);
@@ -1016,8 +1017,9 @@ function showCardModal(card) {
   const radarWrap = document.createElement('div');
   radarWrap.className = 'radar-container';
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '250');
-  svg.setAttribute('height', '250');
+  svg.setAttribute('width', '360');
+  svg.setAttribute('height', '360');
+  svg.style.overflow = 'visible';
   radarWrap.appendChild(svg);
   form.appendChild(radarWrap);
   // Render radar for editing card data
@@ -1127,9 +1129,16 @@ function showCardModal(card) {
 function renderCardRadar(svg, cardData) {
   const radarFields = state.schema.fields.filter((f) => f.radar);
   const numAxes = radarFields.length;
-  const centerX = 125;
-  const centerY = 125;
-  const radius = 100;
+  const size = 360;
+  const centerX = size / 2;
+  const centerY = size / 2;
+  const padding = 20;
+  const labelOffset = 25;
+  const radius = centerX - padding - labelOffset;
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('width', size.toString());
+  svg.setAttribute('height', size.toString());
+  svg.style.overflow = 'visible';
   // Clear svg
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   // Draw grid (5 concentric circles)
@@ -1157,10 +1166,14 @@ function renderCardRadar(svg, cardData) {
     svg.appendChild(line);
     // label
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', (centerX + Math.cos(angle) * (radius + 15)).toString());
-    text.setAttribute('y', (centerY + Math.sin(angle) * (radius + 15)).toString());
-    text.setAttribute('font-size', '8');
-    text.setAttribute('text-anchor', angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start');
+    text.setAttribute('x', (centerX + Math.cos(angle) * (radius + labelOffset)).toString());
+    text.setAttribute('y', (centerY + Math.sin(angle) * (radius + labelOffset)).toString());
+    text.setAttribute('font-size', '10');
+    const isLeftSide = angle > Math.PI / 2 && angle < (Math.PI * 3) / 2;
+    text.setAttribute('text-anchor', isLeftSide ? 'end' : 'start');
+    if (Math.abs(Math.cos(angle)) < 0.01) {
+      text.setAttribute('text-anchor', 'middle');
+    }
     text.setAttribute('dominant-baseline', 'middle');
     text.textContent = field.label;
     svg.appendChild(text);
@@ -1192,9 +1205,16 @@ function renderCardRadar(svg, cardData) {
 function renderBoardRadar(svg) {
   const radarFields = state.schema.fields.filter((f) => f.radar);
   const numAxes = radarFields.length;
-  const centerX = 150;
-  const centerY = 150;
-  const radius = 120;
+  const size = 360;
+  const centerX = size / 2;
+  const centerY = size / 2;
+  const padding = 20;
+  const labelOffset = 25;
+  const radius = centerX - padding - labelOffset;
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('width', size.toString());
+  svg.setAttribute('height', size.toString());
+  svg.style.overflow = 'visible';
   // Clear svg
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   // Draw grid lines
@@ -1222,10 +1242,14 @@ function renderBoardRadar(svg) {
     svg.appendChild(line);
     // label
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', (centerX + Math.cos(angle) * (radius + 20)).toString());
-    text.setAttribute('y', (centerY + Math.sin(angle) * (radius + 20)).toString());
-    text.setAttribute('font-size', '8');
-    text.setAttribute('text-anchor', angle > Math.PI / 2 && angle < (Math.PI * 3) / 2 ? 'end' : 'start');
+    text.setAttribute('x', (centerX + Math.cos(angle) * (radius + labelOffset)).toString());
+    text.setAttribute('y', (centerY + Math.sin(angle) * (radius + labelOffset)).toString());
+    text.setAttribute('font-size', '10');
+    const isLeftSide = angle > Math.PI / 2 && angle < (Math.PI * 3) / 2;
+    text.setAttribute('text-anchor', isLeftSide ? 'end' : 'start');
+    if (Math.abs(Math.cos(angle)) < 0.01) {
+      text.setAttribute('text-anchor', 'middle');
+    }
     text.setAttribute('dominant-baseline', 'middle');
     text.textContent = field.label;
     svg.appendChild(text);
