@@ -98,7 +98,10 @@ const EMBEDDED_SCHEMA = /** @type {any} */ (
           "Academia",
           "Policy",
           "Fundraising",
-          "Operations"
+          "Operations",
+          "Public Trust",
+          "Security",
+          "International"
         ],
         "cardFront": true
       },
@@ -1087,6 +1090,21 @@ function showCardModal(card) {
   function handleSave() {
     const errs = validateCardData(state.schema, cardData);
     if (errs.length) {
+      if (console.groupCollapsed) {
+        console.groupCollapsed('Card validation failed');
+      } else {
+        console.error('Card validation failed');
+      }
+      console.error('Validation errors:', errs);
+      console.debug('Card data attempting to save:', JSON.parse(JSON.stringify(cardData)));
+      console.debug('Active schema info:', {
+        schemaId: state.schema.schemaId,
+        schemaVersion: state.schema.schemaVersion,
+        schemaHash: state.schemaHash
+      });
+      if (console.groupEnd) {
+        console.groupEnd();
+      }
       alert(errs.join('\n'));
       return;
     }
