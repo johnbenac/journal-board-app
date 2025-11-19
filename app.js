@@ -966,48 +966,71 @@ function showCardModal(card) {
   const imgGroup = document.createElement('div');
   imgGroup.className = 'field-group';
   const imgLabel = document.createElement('label');
-  imgLabel.textContent = 'Image (PNG 750x1050)';
+  imgLabel.textContent = 'Image (PNG/JPEG/WEBP 750x1050)';
   const imgInput = document.createElement('input');
   imgInput.type = 'file';
-  imgInput.accept = 'image/png';
+  imgInput.accept = 'image/*';
+  const imgPreview = document.createElement('img');
+  imgPreview.alt = 'Current card image preview';
+  imgPreview.style.display = 'none';
+  imgPreview.style.maxWidth = '100%';
+  imgPreview.style.marginTop = '0.5rem';
+  imgPreview.style.borderRadius = '6px';
+
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.textContent = 'Edit Image';
+  editBtn.style.marginTop = '0.5rem';
+  editBtn.disabled = !imageData;
+
+  function updateImagePreview() {
+    if (imageData) {
+      imgPreview.src = imageData;
+      imgPreview.style.display = 'block';
+      editBtn.disabled = false;
+    } else {
+      imgPreview.removeAttribute('src');
+      imgPreview.style.display = 'none';
+      editBtn.disabled = true;
+    }
+  }
+
+  function openImageEditor(source) {
+    if (!window.ImageEditor || typeof window.ImageEditor.open !== 'function') {
+      alert('Image editor is not available in this browser.');
+      return Promise.resolve();
+    }
+    const { width, height } = state.schema.imageSpec;
+    return window.ImageEditor
+      .open({ source, target: { width, height }, background: '#ffffff' })
+      .then((dataUrl) => {
+        imageData = dataUrl;
+        updateImagePreview();
+        return dataUrl;
+      })
+      .catch((err) => {
+        if (err && err.message === 'cancelled') return;
+        console.error(err);
+      });
+  }
+
   imgInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-      const dataUrl = evt.target.result;
-      const tmpImg = new Image();
-      tmpImg.onload = function () {
-        // Validate dimensions
-        if (
-          tmpImg.width !== state.schema.imageSpec.width ||
-          tmpImg.height !== state.schema.imageSpec.height
-        ) {
-          alert(
-            `Invalid image dimensions. Expected ${state.schema.imageSpec.width}x${state.schema.imageSpec.height}.`
-          );
-          return;
-        }
-        // Check for alpha channel transparency on top-left pixel
-        const canvas = document.createElement('canvas');
-        canvas.width = tmpImg.width;
-        canvas.height = tmpImg.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(tmpImg, 0, 0);
-        const pixel = ctx.getImageData(0, 0, 1, 1).data;
-        if (!state.schema.imageSpec.alphaAllowed && pixel[3] !== 255) {
-          alert('Image must not contain transparency');
-          return;
-        }
-        // Use the provided dataUrl directly (already base64 PNG)
-        imageData = dataUrl;
-      };
-      tmpImg.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+    openImageEditor(file);
+    imgInput.value = '';
   });
+
+  editBtn.addEventListener('click', () => {
+    if (!imageData) return;
+    openImageEditor(imageData);
+  });
+
   imgLabel.appendChild(imgInput);
+  imgLabel.appendChild(editBtn);
+  imgLabel.appendChild(imgPreview);
   imgGroup.appendChild(imgLabel);
+  updateImagePreview();
   form.appendChild(imgGroup);
 
   // Notes section
