@@ -374,10 +374,7 @@ const state = {
   manifest: null
 };
 
-const cardTransfer = window.CardTransfer;
-if (!cardTransfer) {
-  throw new Error('Card transfer utilities failed to load.');
-}
+const cardTransfer = window.CardTransfer || null; // optional enhancement, not required
 
 /**
  * Compute a SHA‑256 hash of a string and return a hex encoded digest.
@@ -573,12 +570,12 @@ function renderDeck(container) {
       showCardModal(card);
     });
     item.appendChild(editBtn);
-    const exportBtn = document.createElement('button');
-    exportBtn.textContent = 'Export';
-    exportBtn.addEventListener('click', () => {
-      exportCard(card.cardId);
-    });
-    item.appendChild(exportBtn);
+    if (cardTransfer) {
+      const exportBtn = document.createElement('button');
+      exportBtn.textContent = 'Export';
+      exportBtn.addEventListener('click', () => exportCard(card.cardId));
+      item.appendChild(exportBtn);
+    }
     // delete button
     const delBtn = document.createElement('button');
     delBtn.textContent = 'Delete';
@@ -643,47 +640,49 @@ function renderDeck(container) {
   importLabel.appendChild(importInput);
   controls.appendChild(importLabel);
 
-  const importCardLabel = document.createElement('label');
-  importCardLabel.style.display = 'inline-block';
-  importCardLabel.style.marginLeft = '0.5rem';
-  importCardLabel.className = 'add-card-btn';
-  importCardLabel.style.background = '#6610f2';
-  importCardLabel.textContent = 'Import Card';
-  const importCardInput = document.createElement('input');
-  importCardInput.type = 'file';
-  importCardInput.accept = '.json,.jfcard';
-  importCardInput.style.display = 'none';
-  importCardInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-      try {
-        const payload = JSON.parse(evt.target.result);
-        const newCard = cardTransfer.prepareImportedCard(payload, {
-          schema: state.schema,
-          schemaHash: state.schemaHash,
-          existingDeck: state.manifest.deck,
-          generateId,
-          validator: validateCardData
-        });
-        state.manifest.deck.push(newCard);
-        saveSession();
-        renderApp();
-      } catch (err) {
-        alert(err.message || 'Failed to import card');
-      } finally {
+  if (cardTransfer) {
+    const importCardLabel = document.createElement('label');
+    importCardLabel.style.display = 'inline-block';
+    importCardLabel.style.marginLeft = '0.5rem';
+    importCardLabel.className = 'add-card-btn';
+    importCardLabel.style.background = '#6610f2';
+    importCardLabel.textContent = 'Import Card';
+    const importCardInput = document.createElement('input');
+    importCardInput.type = 'file';
+    importCardInput.accept = '.json,.jfcard';
+    importCardInput.style.display = 'none';
+    importCardInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        try {
+          const payload = JSON.parse(evt.target.result);
+          const newCard = cardTransfer.prepareImportedCard(payload, {
+            schema: state.schema,
+            schemaHash: state.schemaHash,
+            existingDeck: state.manifest.deck,
+            generateId,
+            validator: validateCardData
+          });
+          state.manifest.deck.push(newCard);
+          saveSession();
+          renderApp();
+        } catch (err) {
+          alert(err.message || 'Failed to import card');
+        } finally {
+          importCardInput.value = '';
+        }
+      };
+      reader.onerror = () => {
+        alert('Failed to read card file');
         importCardInput.value = '';
-      }
-    };
-    reader.onerror = () => {
-      alert('Failed to read card file');
-      importCardInput.value = '';
-    };
-    reader.readAsText(file);
-  });
-  importCardLabel.appendChild(importCardInput);
-  controls.appendChild(importCardLabel);
+      };
+      reader.readAsText(file);
+    });
+    importCardLabel.appendChild(importCardInput);
+    controls.appendChild(importCardLabel);
+  }
   container.appendChild(controls);
 }
 
@@ -1405,6 +1404,10 @@ function exportSession() {
 }
 
 function exportCard(cardId) {
+  if (!cardTransfer) {
+    alert('Card transfer tools are unavailable.');
+    return;
+  }
   const card = state.manifest.deck.find((c) => c.cardId === cardId);
   if (!card) return;
   const payload = cardTransfer.prepareCardExportPayload(
