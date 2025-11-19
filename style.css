@@ -310,3 +310,117 @@ body {
 .error-overlay button:hover {
   background: #c82333;
 }
+
+/* ------------ Compare Mode UI ------------ */
+
+.compare-toggle {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: #555;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.compare-bar {
+  position: sticky;
+  bottom: -1px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  background: #fff;
+  border-top: 1px solid #ddd;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.03);
+  z-index: 5;
+}
+
+.compare-bar .btn-primary {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.compare-bar .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.compare-bar .btn-secondary {
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.compare-bar .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.compare-summary {
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.compare-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-top: -0.25rem;
+  margin-bottom: 0.25rem;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+.color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.compare-table-wrap {
+  max-height: 40vh;
+  overflow: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.compare-table th,
+.compare-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+.compare-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  z-index: 1;
+}
+.row-diff {
+  background: #fffceb;
+}
+
+.diffs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
